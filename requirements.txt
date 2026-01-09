@@ -1,0 +1,16 @@
+# Web automation
+selenium==4.16.0
+
+# Configuration
+python-dotenv==1.1.0
+PyYAML==6.0.1
+
+# Database
+psycopg2-binary==2.9.9
+
+# API
+Flask==3.0.0
+gunicorn==21.2.0
+
+# Core
+requests==2.32.3

@@ -1,0 +1,36 @@
+services:
+  scraper-test:
+    build: .
+    container_name: aetos-scraper-test
+    env_file: 
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./cookies:/app/cookies
+      - ./logs:/app/logs
+    command: python test_navigation.py
+
+  # Future: API server for receiving scrape requests
+  scraper-api:
+    build: .
+    container_name: aetos-scraper-api
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cookies:/app/cookies
+      - ./logs:/app/logs
+    command: python -m flask run --host=0.0.0.0 --port=8000
+    profiles:
+      - api  # Only start with --profile api
+
+# Usage:
+# Test scraper:     docker-compose up scraper-test
+# Run API server:   docker-compose --profile api up scraper-api
+# Build only:       docker-compose build

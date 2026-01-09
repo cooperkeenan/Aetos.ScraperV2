@@ -1,0 +1,29 @@
+# Facebook Marketplace Scraper Configuration
+
+browser:
+  headless: true
+  window_size: "1920,1080"
+  user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.7151.103 Safari/537.36"
+  page_load_timeout: 30
+  implicit_wait: 10
+  enable_stealth: true
+
+proxy:
+  enabled: true
+  provider: "iproyal"
+  sticky_sessions: true
+  connection_timeout: 15
+
+facebook:
+  login_url: "https://www.facebook.com/login"
+  max_login_attempts: 3
+  session_refresh_hours: 12
+
+paths:
+  cookies_dir: "/app/cookies"
+  logs_dir: "/app/logs"
+  screenshots_dir: "/app/logs/screenshots"
+
+logging:
+  level: "INFO"
+  save_screenshots_on_error: true
