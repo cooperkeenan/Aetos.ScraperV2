@@ -75,6 +75,7 @@ def test_navigation():
             scraper.print_listings(listings, limit=MAX_RESULTS)
             
             print("[Test] ✅ Test completed successfully!")
+            time.sleep(10)
             
     except Exception as e:
         print(f"\n[Test] ❌ Test failed: {e}")

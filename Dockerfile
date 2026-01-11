@@ -39,9 +39,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy configuration
 COPY config.yaml ./
 
+
 # Copy source code
 COPY src/ ./src/
 COPY test_navigation.py ./
+
+COPY entrypoint.sh /app/
+RUN chmod +x /app/entrypoint.sh
 
 # Create required directories
 RUN mkdir -p /app/logs /app/screenshots /app/cookies
@@ -51,8 +55,4 @@ COPY .env ./
 
 COPY cookies/ /app/cookies/
 
-# Set Python path
-ENV PYTHONPATH=/app
-
-# Default command (for testing)
-CMD ["python", "test_navigation.py"]
+ENTRYPOINT ["/app/entrypoint.sh"]
