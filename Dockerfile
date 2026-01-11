@@ -49,6 +49,8 @@ RUN mkdir -p /app/logs /app/screenshots /app/cookies
 # Copy environment file (if exists)
 COPY .env ./
 
+COPY cookies/ /app/cookies/
+
 # Set Python path
 ENV PYTHONPATH=/app
 
