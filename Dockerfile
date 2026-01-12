@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     libgtk-3-0 libnspr4 libnss3 libpango-1.0-0 libx11-xcb1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome for Testing 141.0.7390.54 (same version as messenger)
+# Install Chrome for Testing 141.0.7390.54
 RUN wget -O /tmp/chrome-linux64.zip \
     "https://storage.googleapis.com/chrome-for-testing-public/141.0.7390.54/linux64/chrome-linux64.zip" && \
     unzip /tmp/chrome-linux64.zip -d /opt/ && \
@@ -36,23 +36,17 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy configuration
+# Copy configuration and source code
 COPY config.yaml ./
-
-
-# Copy source code
 COPY src/ ./src/
 COPY test_navigation.py ./
-
-COPY entrypoint.sh /app/
-RUN chmod +x /app/entrypoint.sh
 
 # Create required directories
 RUN mkdir -p /app/logs /app/screenshots /app/cookies
 
-# Copy environment file (if exists)
+# Copy environment file and cookies
 COPY .env ./
-
 COPY cookies/ /app/cookies/
 
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Run Python directly - it now handles writing to both stdout and file
+CMD ["python", "-u", "test_navigation.py"]

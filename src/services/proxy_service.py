@@ -4,11 +4,15 @@ Proxy service with IPRoyal sticky sessions
 Ported from scraper code
 """
 
-import os
-import hashlib
 import datetime
+import hashlib
+import logging
+import os
 import requests
 from typing import Optional
+
+
+logger = logging.getLogger(__name__)
 
 
 class ProxyService:
@@ -37,7 +41,7 @@ class ProxyService:
         if sticky_session:
             session_id = self._get_daily_session_id()
             parts.append(f"session-{session_id}")
-            print(f"[Proxy] Using sticky session: {session_id}")
+            logger.info("[Proxy] Using sticky session: %s", session_id)
         
         password = f"{self.password}_{'_'.join(parts)}"
         proxy_url = f"http://{self.user}:{password}@{self.host}:{self.port}"
@@ -57,17 +61,17 @@ class ProxyService:
             proxy_url = self.get_proxy_url()
         
         try:
-            print(f"[Proxy] Testing proxy: {proxy_url[:50]}...")
+            logger.info("[Proxy] Testing proxy: %s...", proxy_url[:50])
             response = requests.get(
                 "https://ipv4.icanhazip.com",
                 proxies={"http": proxy_url, "https": proxy_url},
                 timeout=15
             )
             ip = response.text.strip()
-            print(f"[Proxy] ✅ Proxy IP: {ip}")
+            logger.info("[Proxy] ✅ Proxy IP: %s", ip)
             return ip
         except Exception as e:
-            print(f"[Proxy] ❌ Test failed: {e}")
+            logger.warning("[Proxy] ❌ Test failed: %s", e)
             return None
     
     

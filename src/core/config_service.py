@@ -1,9 +1,13 @@
 
+import logging
 import os
 import yaml
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,7 +63,7 @@ class ConfigService:
     def _load_config(self) -> None:
         try:
             if not os.path.exists(self.config_path):
-                print(f"[Config] No config at {self.config_path}, using defaults")
+                logger.info("[Config] No config at %s, using defaults", self.config_path)
                 return
             
             with open(self.config_path, 'r') as f:
@@ -84,7 +88,7 @@ class ConfigService:
                         setattr(self.paths, key, value)
         
         except Exception as e:
-            print(f"[Config] Error loading: {e}, using defaults")
+            logger.warning("[Config] Error loading: %s, using defaults", e)
     
     def _load_env_vars(self) -> None:
         # Proxy credentials

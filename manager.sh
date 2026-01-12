@@ -62,18 +62,6 @@ run_container() {
     echo -e "${GREEN}✅ Container created with logs mounted to Azure File Share${NC}"
 }
 
-# Stream logs
-stream_logs() {
-    echo -e "${BLUE}📋 Container starting...${NC}"
-    echo -e "${BLUE}Waiting 60 seconds for script to complete...${NC}\n"
-    
-    # Wait for container to finish (takes ~30-60s)
-    sleep 60
-    
-    # Now show the logs from file share
-    view_file_share_logs
-}
-
 # Build and push
 build_and_push() {
     echo -e "${BLUE}🔨 Building Docker image...${NC}"
@@ -87,29 +75,77 @@ build_and_push() {
 
 # View logs from Azure File Share
 view_file_share_logs() {
-    echo -e "\n${GREEN}=== View File Share Logs ===${NC}\n"
-    echo -e "${BLUE}📋 Downloading logs from Azure File Share...${NC}\n"
+    echo -e "\n${GREEN}=== Downloading Logs ===${NC}\n"
+    
+    # Create local logs directory
+    mkdir -p ./logs
     
     local storage_key=$(az storage account keys list \
         --resource-group $RESOURCE_GROUP \
         --account-name aetosscraperstorage \
         --query "[0].value" -o tsv)
     
-    echo -e "${BLUE}====================================================================${NC}\n"
+    echo -e "${BLUE}Downloading output.log...${NC}"
     
-    # Try to download and display the log
     if az storage file download \
         --account-name aetosscraperstorage \
         --account-key $storage_key \
         --share-name scraper-logs \
         --path output.log \
-        --dest /dev/stdout 2>/dev/null; then
-        echo ""
+        --dest ./logs/output.log \
+        --output none 2>/dev/null; then
+        
+        echo -e "${GREEN}✅ Downloaded to ./logs/output.log${NC}\n"
+        echo -e "${BLUE}====================================================================${NC}"
+        cat ./logs/output.log
+        echo -e "${BLUE}====================================================================${NC}"
     else
-        echo -e "${RED}No logs found yet. Container may still be running or hasn't started.${NC}"
+        echo -e "${RED}❌ Failed to download logs${NC}"
+    fi
+}
+
+# Download latest screenshot
+download_screenshot() {
+    echo -e "\n${GREEN}=== Downloading Screenshot ===${NC}\n"
+    
+    # Create local logs directory
+    mkdir -p ./logs
+    
+    local storage_key=$(az storage account keys list \
+        --resource-group $RESOURCE_GROUP \
+        --account-name aetosscraperstorage \
+        --query "[0].value" -o tsv)
+    
+    echo -e "${BLUE}Finding latest screenshot...${NC}"
+    
+    # Get list of PNG files
+    local latest_screenshot=$(az storage file list \
+        --account-name aetosscraperstorage \
+        --account-key $storage_key \
+        --share-name scraper-logs \
+        --query "[?ends_with(name, '.png')] | sort_by(@, &properties.lastModified) | [-1].name" \
+        --output tsv 2>/dev/null)
+    
+    if [ -z "$latest_screenshot" ]; then
+        echo -e "${RED}❌ No screenshots found${NC}"
+        return
     fi
     
-    echo -e "\n${BLUE}====================================================================${NC}"
+    echo -e "${BLUE}Downloading: $latest_screenshot${NC}"
+    
+    if az storage file download \
+        --account-name aetosscraperstorage \
+        --account-key $storage_key \
+        --share-name scraper-logs \
+        --path "$latest_screenshot" \
+        --dest ./logs/screenshot.png \
+        --output none 2>/dev/null; then
+        
+        echo -e "${GREEN}✅ Downloaded to ./logs/screenshot.png${NC}"
+        echo -e "${BLUE}Original name: $latest_screenshot${NC}"
+    else
+        echo -e "${RED}❌ Failed to download screenshot${NC}"
+    fi
 }
 
 # List all log files in file share
@@ -128,6 +164,26 @@ list_log_files() {
         --output table
 }
 
+# Check container status
+check_status() {
+    echo -e "\n${GREEN}=== Container Status ===${NC}\n"
+    
+    if az container show \
+        --resource-group $RESOURCE_GROUP \
+        --name $CONTAINER_NAME \
+        --output table 2>/dev/null; then
+        
+        echo -e "\n${BLUE}=== Instance View ===${NC}"
+        az container show \
+            --resource-group $RESOURCE_GROUP \
+            --name $CONTAINER_NAME \
+            --query "instanceView" \
+            --output table
+    else
+        echo -e "${RED}❌ Container not found${NC}"
+    fi
+}
+
 # Main menu
 show_menu() {
     clear
@@ -136,47 +192,55 @@ show_menu() {
     echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
     echo ""
     echo "1. 🔨 Build, Push & Run"
-    echo "   (Rebuild image, push to ACR, run, view logs)"
+    echo "   (Rebuild image, push to ACR, run container)"
     echo ""
-    echo "2. 🚀 Run & View Logs"
-    echo "   (Use existing image, run, view logs)"
+    echo "2. 🚀 Run Container"
+    echo "   (Use existing image, run container)"
     echo ""
-    echo "3. 📋 View Logs from File Share"
-    echo "   (Download and display output.log)"
+    echo "3. 📊 Check Container Status"
+    echo "   (View current container state and details)"
     echo ""
-    echo "4. 📁 List All Log Files"
+    echo "4. 📋 Download & View Logs"
+    echo "   (Download output.log to ./logs/ and display)"
+    echo ""
+    echo "5. 📸 Download Latest Screenshot"
+    echo "   (Download newest screenshot to ./logs/)"
+    echo ""
+    echo "6. 📁 List All Files in File Share"
     echo "   (Show all files in Azure File Share)"
     echo ""
-    echo "5. 🗑️  Delete Container"
+    echo "7. 🗑️  Delete Container"
     echo "   (Stop and remove container)"
     echo ""
-    echo "6. ❌ Exit"
+    echo "8. ❌ Exit"
     echo ""
-    echo -n "Choose option [1-6]: "
+    echo -n "Choose option [1-8]: "
 }
 
 
-# Option 1: Build, Push & Stream
+# Option 1: Build, Push & Run
 option_build_push_stream() {
-    echo -e "\n${GREEN}=== Build, Push & Stream ===${NC}\n"
+    echo -e "\n${GREEN}=== Build, Push & Run ===${NC}\n"
     build_and_push
     delete_container
     run_container
-    stream_logs
+    
+    echo -e "\n${BLUE}Container is running. Use Option 4 to view logs when complete.${NC}"
 }
 
-# Option 2: Run & Stream
+# Option 2: Run
 option_run_stream() {
-    echo -e "\n${GREEN}=== Run & Stream ===${NC}\n"
+    echo -e "\n${GREEN}=== Run Container ===${NC}\n"
     delete_container
     run_container
-    stream_logs
+    
+    echo -e "\n${BLUE}Container is running. Use Option 4 to view logs when complete.${NC}"
 }
 
 # Option 3: View Logs
 option_view_logs() {
     echo -e "\n${GREEN}=== View Logs ===${NC}\n"
-    stream_logs
+    view_file_share_logs
 }
 
 # Option 4: Delete Container
@@ -200,20 +264,26 @@ main() {
                 option_run_stream
                 ;;
             3)
-                view_file_share_logs
+                check_status
                 ;;
             4)
-                list_log_files
+                view_file_share_logs
                 ;;
             5)
-                option_delete
+                download_screenshot
                 ;;
             6)
+                list_log_files
+                ;;
+            7)
+                option_delete
+                ;;
+            8)
                 echo -e "\n${GREEN}👋 Goodbye!${NC}\n"
                 exit 0
                 ;;
             *)
-                echo -e "\n${RED}Invalid option. Please choose 1-6.${NC}\n"
+                echo -e "\n${RED}Invalid option. Please choose 1-8.${NC}\n"
                 sleep 2
                 ;;
         esac

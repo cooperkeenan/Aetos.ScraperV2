@@ -1,5 +1,6 @@
 """Facebook service - Session management only"""
 
+import logging
 import random
 import time
 
@@ -10,6 +11,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from ..core.config_service import ConfigService
 from .browser_service import BrowserService
 from .session_service import SessionService
+
+
+logger = logging.getLogger(__name__)
 
 
 class FacebookService:
@@ -39,16 +43,20 @@ class FacebookService:
                     cookie.pop("expiry", None)
                 self.driver.add_cookie(cookie)
             except Exception as e:
-                print(f"[Facebook] Failed to add cookie {cookie.get('name')}: {e}")
+                logger.warning(
+                    "[Facebook] Failed to add cookie %s: %s",
+                    cookie.get("name"),
+                    e,
+                )
 
         self.driver.refresh()
         self._human_delay(2, 3)
 
         if self._is_logged_in():
-            print("[Facebook] Session restored successfully")
+            logger.info("[Facebook] Session restored successfully")
             return True
 
-        print("[Facebook] Session invalid")
+        logger.warning("[Facebook] Session invalid")
         return False
 
     def _is_logged_in(self) -> bool:

@@ -1,9 +1,13 @@
 # src/services/session_service.py
+import logging
 import os
 import pickle
 from typing import List, Dict, Optional, Any
 
 from ..core.config_service import ConfigService
+
+
+logger = logging.getLogger(__name__)
 
 
 class SessionService:
@@ -16,17 +20,17 @@ class SessionService:
     def load_cookies(self) -> Optional[List[Dict[str, Any]]]:
         try:
             if not os.path.exists(self.cookie_file):
-                print("[Session] No cookies found")
+                logger.info("[Session] No cookies found")
                 return None
             
             with open(self.cookie_file, 'rb') as f:
                 cookies = pickle.load(f)
             
-            print(f"[Session] Loaded {len(cookies)} cookies")
+            logger.info("[Session] Loaded %s cookies", len(cookies))
             return cookies
             
         except Exception as e:
-            print(f"[Session] Failed to load cookies: {e}")
+            logger.error("[Session] Failed to load cookies: %s", e)
             return None
     
 
@@ -39,8 +43,8 @@ class SessionService:
         essential = {'c_user', 'xs'}
         
         if not essential.issubset(cookie_names):
-            print(f"[Session] Missing essential cookies")
+            logger.warning("[Session] Missing essential cookies")
             return False
         
-        print("[Session] Cookies valid")
+        logger.info("[Session] Cookies valid")
         return True

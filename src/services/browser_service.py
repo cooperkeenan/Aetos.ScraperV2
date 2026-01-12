@@ -4,6 +4,7 @@ Stealth browser service with proxy support
 Ported from scraper code
 """
 
+import logging
 import os
 import subprocess
 import time
@@ -16,6 +17,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from ..core.config_service import ConfigService
 from .proxy_service import ProxyService
+
+
+logger = logging.getLogger(__name__)
 
 
 class BrowserService:
@@ -42,9 +46,9 @@ class BrowserService:
         """Start virtual display"""
         try:
             subprocess.run(['pgrep', 'Xvfb'], check=True, capture_output=True)
-            print("[Browser] Xvfb already running")
+            logger.info("[Browser] Xvfb already running")
         except subprocess.CalledProcessError:
-            print("[Browser] Starting Xvfb...")
+            logger.info("[Browser] Starting Xvfb...")
             subprocess.Popen([
                 'Xvfb', ':99', '-screen', '0', '1920x1080x16'
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -59,7 +63,7 @@ class BrowserService:
             ], capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0:
-                print(f"[Browser] Chrome: {result.stdout.strip()}")
+                logger.info("[Browser] Chrome: %s", result.stdout.strip())
             else:
                 raise RuntimeError("Chrome binary test failed")
             
@@ -69,7 +73,7 @@ class BrowserService:
             ], capture_output=True, text=True, timeout=10)
             
             if result.returncode == 0:
-                print(f"[Browser] ChromeDriver: {result.stdout.strip()}")
+                logger.info("[Browser] ChromeDriver: %s", result.stdout.strip())
             else:
                 raise RuntimeError("ChromeDriver binary test failed")
                 
@@ -78,7 +82,7 @@ class BrowserService:
     
     def create_driver(self) -> webdriver.Chrome:
         """Create Chrome driver with stealth and proxy"""
-        print("[Browser] Creating stealth Chrome driver...")
+        logger.info("[Browser] Creating stealth Chrome driver...")
         
         # Clear proxy env vars that interfere with Chrome startup
         self._proxy_env_backup = self._clear_proxy_env()
@@ -101,9 +105,9 @@ class BrowserService:
                 proxy_url = self.proxy_service.get_proxy_url()
                 ip = self.proxy_service.test_proxy(proxy_url)
                 if not ip:
-                    print("[Browser] ⚠️ Proxy test failed, continuing anyway")
+                    logger.warning("[Browser] ⚠️ Proxy test failed, continuing anyway")
             
-            print("[Browser] ✅ Stealth Chrome driver ready")
+            logger.info("[Browser] ✅ Stealth Chrome driver ready")
             return self.driver
             
         except Exception as e:
@@ -180,10 +184,10 @@ class BrowserService:
                 "Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']})"
             )
             
-            print("[Browser] ✅ Stealth patches applied")
+            logger.info("[Browser] ✅ Stealth patches applied")
             
         except Exception as e:
-            print(f"[Browser] ⚠️ Stealth patches failed: {e}")
+            logger.warning("[Browser] ⚠️ Stealth patches failed: %s", e)
     
     def _clear_proxy_env(self) -> dict:
         """Clear proxy env vars that interfere with Chrome"""
@@ -193,7 +197,7 @@ class BrowserService:
         for var in proxy_vars:
             if var in os.environ:
                 backup[var] = os.environ.pop(var)
-                print(f"[Browser] Temporarily cleared {var}")
+                logger.info("[Browser] Temporarily cleared %s", var)
         
         return backup
     
@@ -201,7 +205,7 @@ class BrowserService:
         """Restore proxy environment variables"""
         for var, value in self._proxy_env_backup.items():
             os.environ[var] = value
-            print(f"[Browser] Restored {var}")
+            logger.info("[Browser] Restored %s", var)
         self._proxy_env_backup.clear()
     
     def get_driver(self) -> webdriver.Chrome:
@@ -220,10 +224,10 @@ class BrowserService:
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"/app/logs/{name}_{timestamp}.png"  # Changed from /tmp
             self.driver.save_screenshot(filename)
-            print(f"[Browser] Screenshot: {filename}")
+            logger.info("[Browser] Screenshot: %s", filename)
             return filename
         except Exception as e:
-            print(f"[Browser] Screenshot failed: {e}")
+            logger.warning("[Browser] Screenshot failed: %s", e)
             return None
     
     def quit(self):
@@ -232,9 +236,9 @@ class BrowserService:
             try:
                 self.driver.quit()
                 self.driver = None
-                print("[Browser] ✅ Browser closed")
+                logger.info("[Browser] ✅ Browser closed")
             except Exception as e:
-                print(f"[Browser] Error closing: {e}")
+                logger.warning("[Browser] Error closing: %s", e)
     
     def wait(self, timeout: int = 10):
         """Get WebDriverWait instance"""
