@@ -1,6 +1,3 @@
-# src/scraper/element_extractor.py
-
-
 import logging
 import re
 from typing import Any, Dict, Optional
@@ -14,7 +11,6 @@ class ElementExtractor:
 
     @staticmethod
     def extract_listing_data(element, url: str) -> Optional[Dict[str, Any]]:
-
         try:
             # Get parent container
             parent = element
@@ -52,7 +48,6 @@ class ElementExtractor:
 
     @staticmethod
     def extract_price(element) -> Optional[float]:
-
         try:
             text_elements = element.find_elements(
                 By.XPATH, ".//*[contains(text(), '£') or contains(text(), '$')]"

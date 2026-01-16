@@ -1,5 +1,3 @@
-# src/scraper/marketplace_scraper.py
-
 import logging
 import time
 from typing import Dict, List
@@ -71,7 +69,6 @@ class MarketplaceScraper:
         return listings[:max_listings]
 
     def _extract_visible_listings(self, seen_urls: set) -> List[Dict]:
-
         new_listings = []
 
         try:
@@ -97,9 +94,8 @@ class MarketplaceScraper:
         return new_listings
 
     def print_listings(self, listings: List[Dict], limit: int = 3) -> None:
-        """Print formatted listings"""
         logger.info("\n" + "=" * 80)
-        logger.info(f" FOUND {len(listings)} LISTINGS")
+        logger.info(f"FOUND {len(listings)} LISTINGS")
         logger.info("=" * 80)
 
         for i, listing in enumerate(listings[:limit], 1):
@@ -109,8 +105,8 @@ class MarketplaceScraper:
             location = f" - {listing['location']}" if listing.get("location") else ""
 
             logger.info(f"\n{i}. {listing['title']}")
-            logger.info(f"    {price}{location}")
-            logger.info(f"    {listing['url']}")
+            logger.info(f"   💰 {price}{location}")
+            logger.info(f"   🔗 {listing['url']}")
 
         if len(listings) > limit:
             logger.info(f"\n... and {len(listings) - limit} more")

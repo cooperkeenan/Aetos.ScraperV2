@@ -40,6 +40,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY config.yaml ./
 COPY src/ ./src/
 COPY test_navigation.py ./
+COPY entrypoint.sh ./
+RUN chmod +x /app/entrypoint.sh
 
 # Create required directories
 RUN mkdir -p /app/logs /app/screenshots /app/cookies
@@ -48,5 +50,5 @@ RUN mkdir -p /app/logs /app/screenshots /app/cookies
 COPY .env ./
 COPY cookies/ /app/cookies/
 
-# Run Python directly - it now handles writing to both stdout and file
-CMD ["python", "-u", "test_navigation.py"]
+# Use entrypoint that writes to both stdout and file
+ENTRYPOINT ["/app/entrypoint.sh"]

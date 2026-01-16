@@ -148,6 +148,54 @@ download_screenshot() {
     fi
 }
 
+# Download HTML files for debugging
+download_html_files() {
+    echo -e "\n${GREEN}=== Downloading HTML Files ===${NC}\n"
+    
+    # Create local logs directory
+    mkdir -p ./logs
+    
+    local storage_key=$(az storage account keys list \
+        --resource-group $RESOURCE_GROUP \
+        --account-name aetosscraperstorage \
+        --query "[0].value" -o tsv)
+    
+    echo -e "${BLUE}Finding HTML files...${NC}"
+    
+    # Get list of HTML files
+    local html_files=$(az storage file list \
+        --account-name aetosscraperstorage \
+        --account-key $storage_key \
+        --share-name scraper-logs \
+        --query "[?ends_with(name, '.html')].name" \
+        --output tsv 2>/dev/null)
+    
+    if [ -z "$html_files" ]; then
+        echo -e "${RED}❌ No HTML files found${NC}"
+        return
+    fi
+    
+    # Download each HTML file
+    while IFS= read -r filename; do
+        echo -e "${BLUE}Downloading: $filename${NC}"
+        
+        az storage file download \
+            --account-name aetosscraperstorage \
+            --account-key $storage_key \
+            --share-name scraper-logs \
+            --path "$filename" \
+            --dest "./logs/$filename" \
+            --output none 2>/dev/null
+        
+        if [ -f "./logs/$filename" ]; then
+            local size=$(wc -c < "./logs/$filename")
+            echo -e "${GREEN}✅ Downloaded ./logs/$filename (${size} bytes)${NC}"
+        fi
+    done <<< "$html_files"
+    
+    echo -e "\n${GREEN}All HTML files downloaded to ./logs/${NC}"
+}
+
 # List all log files in file share
 list_log_files() {
     echo -e "\n${GREEN}=== Log Files in Azure File Share ===${NC}\n"
@@ -206,15 +254,18 @@ show_menu() {
     echo "5. 📸 Download Latest Screenshot"
     echo "   (Download newest screenshot to ./logs/)"
     echo ""
-    echo "6. 📁 List All Files in File Share"
+    echo "6. 🌐 Download HTML Files"
+    echo "   (Download all .html files for debugging)"
+    echo ""
+    echo "7. 📁 List All Files in File Share"
     echo "   (Show all files in Azure File Share)"
     echo ""
-    echo "7. 🗑️  Delete Container"
+    echo "8. 🗑️  Delete Container"
     echo "   (Stop and remove container)"
     echo ""
-    echo "8. ❌ Exit"
+    echo "9. ❌ Exit"
     echo ""
-    echo -n "Choose option [1-8]: "
+    echo -n "Choose option [1-9]: "
 }
 
 
@@ -273,17 +324,20 @@ main() {
                 download_screenshot
                 ;;
             6)
-                list_log_files
+                download_html_files
                 ;;
             7)
-                option_delete
+                list_log_files
                 ;;
             8)
+                option_delete
+                ;;
+            9)
                 echo -e "\n${GREEN}👋 Goodbye!${NC}\n"
                 exit 0
                 ;;
             *)
-                echo -e "\n${RED}Invalid option. Please choose 1-8.${NC}\n"
+                echo -e "\n${RED}Invalid option. Please choose 1-9.${NC}\n"
                 sleep 2
                 ;;
         esac
