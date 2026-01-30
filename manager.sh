@@ -65,7 +65,7 @@ run_container() {
 # Build and push
 build_and_push() {
     echo -e "${BLUE}🔨 Building Docker image...${NC}"
-    docker build -t $IMAGE .
+    docker build --no-cache -t $IMAGE .
     
     echo -e "${BLUE}📤 Pushing to registry...${NC}"
     docker push $IMAGE

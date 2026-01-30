@@ -42,6 +42,7 @@ COPY src/ ./src/
 COPY test_navigation.py ./
 COPY entrypoint.sh ./
 RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Create required directories
 RUN mkdir -p /app/logs /app/screenshots /app/cookies
@@ -51,4 +52,4 @@ COPY .env ./
 COPY cookies/ /app/cookies/
 
 # Use entrypoint that writes to both stdout and file
-ENTRYPOINT ["/app/entrypoint.sh"]
+CMD ["python", "test_navigation.py"]

@@ -18,97 +18,89 @@ class MarketplaceScraper:
         self.base_url = "https://www.facebook.com/marketplace"
 
     def search(self, query: str) -> bool:
-        logger.info(f"[Scraper] Searching for: '{query}'")
-
         try:
             search_url = f"{self.base_url}/search/?query={query}"
             self.driver.get(search_url)
             self.browser.human_delay(5, 7)
 
             if "/marketplace/" not in self.driver.current_url:
-                logger.error(f"[Scraper] ❌ Not on marketplace")
+                logger.error(f"Not on marketplace. URL: {self.driver.current_url}")
                 return False
 
-            logger.info("[Scraper] ✅ Search successful")
             return True
-
         except Exception as e:
-            logger.error(f"[Scraper] ❌ Search failed: {e}")
+            logger.error(f"Search failed: {e}")
             return False
 
-    def collect_listings(self, max_listings: int = 50) -> List[Dict]:
-
-        logger.info(f"[Scraper] Collecting up to {max_listings} listings...")
-
+    def collect_listings(
+        self, max_listings: int = 200, keyword: str = None
+    ) -> List[Dict]:
         listings = []
         seen_urls = set()
-        scroll_attempts = 0
-        no_new_count = 0
+        scrolls_without_keyword = 0
 
-        time.sleep(3)  # Initial page load
+        time.sleep(3)
 
-        while len(listings) < max_listings and scroll_attempts < 20:
-            scroll_attempts += 1
-
+        for scroll in range(100):  # Max 50 scrolls as safety limit
             new_listings = self._extract_visible_listings(seen_urls)
 
             if new_listings:
-                listings.extend(new_listings)
-                logger.info(f"[Scraper] Collected {len(listings)}/{max_listings}")
-                no_new_count = 0
-            else:
-                no_new_count += 1
+                # Check if any new listings contain the keyword
+                if keyword:
+                    has_keyword = any(
+                        keyword.lower() in listing.get("title", "").lower()
+                        for listing in new_listings
+                    )
+                    if has_keyword:
+                        scrolls_without_keyword = 0
+                    else:
+                        scrolls_without_keyword += 1
+                else:
+                    scrolls_without_keyword = 0
 
-            if no_new_count >= 3:
+                listings.extend(new_listings)
+                logger.info(
+                    f"Collected {len(listings)} total "
+                    f"({scrolls_without_keyword} scrolls without '{keyword}')"
+                )
+            else:
+                scrolls_without_keyword += 1
+
+            # Stop if we've scrolled 10 times without finding the keyword
+            if scrolls_without_keyword >= 10:
+                logger.info(f"Stopped: 10 scrolls without '{keyword}' in titles")
+                break
+
+            # Also stop if we hit max_listings
+            if len(listings) >= max_listings:
+                logger.info(f"Stopped: reached max_listings ({max_listings})")
                 break
 
             self.browser.scroll_down()
             self.browser.human_delay(1, 2)
 
-        logger.info(f"[Scraper] Collected {len(listings)} total")
-        return listings[:max_listings]
+        logger.info(f"Collected {len(listings)} total listings")
+        return listings
 
     def _extract_visible_listings(self, seen_urls: set) -> List[Dict]:
         new_listings = []
 
         try:
-            listing_links = self.driver.find_elements(
+            links = self.driver.find_elements(
                 By.CSS_SELECTOR, "a[href*='/marketplace/item/']"
             )
 
-            for link in listing_links:
+            for link in links:
                 try:
                     url = link.get_attribute("href")
-                    if not url or url in seen_urls:
-                        continue
-
-                    listing = ElementExtractor.extract_listing_data(link, url)
-                    if listing:
-                        new_listings.append(listing)
-                        seen_urls.add(url)
+                    if url and url not in seen_urls:
+                        listing = ElementExtractor.extract_listing_data(link, url)
+                        if listing:
+                            new_listings.append(listing)
+                            seen_urls.add(url)
                 except:
                     continue
         except Exception as e:
-            logger.error(f"[Scraper] Error: {e}")
+            logger.error(f"Extraction error: {e}")
 
         return new_listings
-
-    def print_listings(self, listings: List[Dict], limit: int = 3) -> None:
-        logger.info("\n" + "=" * 80)
-        logger.info(f"FOUND {len(listings)} LISTINGS")
-        logger.info("=" * 80)
-
-        for i, listing in enumerate(listings[:limit], 1):
-            price = (
-                f"£{listing['price']:.0f}" if listing.get("price") else "Price unknown"
-            )
-            location = f" - {listing['location']}" if listing.get("location") else ""
-
-            logger.info(f"\n{i}. {listing['title']}")
-            logger.info(f"   💰 {price}{location}")
-            logger.info(f"   🔗 {listing['url']}")
-
-        if len(listings) > limit:
-            logger.info(f"\n... and {len(listings) - limit} more")
-
-        logger.info("\n" + "=" * 80 + "\n")
