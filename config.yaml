@@ -20,9 +20,9 @@ facebook:
   session_refresh_hours: 12
 
 paths:
-  cookies_dir: "/app/cookies"
-  logs_dir: "/app/logs"
-  screenshots_dir: "/app/logs/screenshots"
+  cookies_dir: "cookies"
+  logs_dir: "logs"
+  screenshots_dir: "logs/screenshots"
 
 logging:
   level: "INFO"

@@ -14,7 +14,6 @@ class ProductService:
         self.product_repository = product_repository
 
     def get_products_for_brand(self, brand: str) -> List[Product]:
-
         logger.info(f"Fetching products for brand: {brand}")
         products = self.product_repository.get_active_products_by_brand(brand)
         logger.info(f"Found {len(products)} products for {brand}")
@@ -24,6 +23,6 @@ class ProductService:
         """Get global avoid keywords"""
         logger.info("Fetching avoid keywords")
         keywords_dict = self.product_repository.get_global_filter_keywords()
-        avoid_keywords = keywords_dict.get("avoid", [])
-        logger.info(f"Loaded {len(avoid_keywords)} avoid keywords")
+        avoid_keywords = keywords_dict.get("reject", [])
+        logger.info(f"Loaded {len(avoid_keywords)} reject keywords: {avoid_keywords[:5] if avoid_keywords else []}")
         return avoid_keywords

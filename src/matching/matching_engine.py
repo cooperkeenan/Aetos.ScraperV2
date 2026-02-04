@@ -16,19 +16,15 @@ logger = logging.getLogger(__name__)
 class MatchingEngine:
 
     def __init__(self, avoid_keywords: List[str] = None):
-
         self.title_matcher = TitleMatcher()
         self.price_matcher = PriceMatcher()
         self.keyword_filter = KeywordFilter(avoid_keywords or [])
-
         self.confidence_calculator = ConfidenceCalculator()
-
         self.min_confidence = MatchingSettings.MIN_CONFIDENCE_THRESHOLD
 
     def match_listing(
         self, listing: Listing, products: List[Product]
     ) -> List[MatchResult]:
-
         results = []
 
         for product in products:
@@ -37,14 +33,28 @@ class MatchingEngine:
                 results.append(result)
 
         results.sort(key=lambda r: r.confidence, reverse=True)
-
         return results
 
     def match_listings(
         self, listings: List[Listing], products: List[Product]
     ) -> List[MatchResult]:
-
         all_results = []
+        
+        # Debug first few listings
+        logger.info(f"\n[Matching Debug] Testing first 3 listings:")
+        for i, listing in enumerate(listings[:3], 1):
+            logger.info(f"\n  Listing {i}: '{listing.title}'")
+            logger.info(f"  Price: £{listing.price if listing.price else 'None'}")
+            
+            # Try matching against first product as example
+            if products:
+                product = products[0]
+                title_score, title_reason = self.title_matcher.match(listing, product)
+                price_score, price_reason = self.price_matcher.match(listing, product)
+                keyword_score, keyword_reason = self.keyword_filter.match(listing, product)
+                
+                logger.info(f"  vs {product}: Title={title_score:.0f}%, Price={price_score:.0f}%, Keywords={keyword_score:.0f}%")
+                logger.info(f"    {title_reason}")
 
         for listing in listings:
             matches = self.match_listing(listing, products)
@@ -60,7 +70,6 @@ class MatchingEngine:
     def _match_single(
         self, listing: Listing, product: Product
     ) -> Optional[MatchResult]:
-
         title_score, title_reason = self.title_matcher.match(listing, product)
         price_score, price_reason = self.price_matcher.match(listing, product)
         keyword_score, keyword_reason = self.keyword_filter.match(listing, product)

@@ -1,4 +1,3 @@
-
 import logging
 import os
 import yaml
@@ -33,28 +32,35 @@ class ProxyConfig:
 
 @dataclass
 class PathConfig:
-    cookies_dir: str = "/app/cookies"
-    logs_dir: str = "/app/logs"
-    screenshots_dir: str = "/app/logs/screenshots"
+    cookies_dir: str = "cookies"
+    logs_dir: str = "logs"
+    screenshots_dir: str = "logs/screenshots"
 
 
 class ConfigService:
     
     def __init__(self, config_path: str = None):
-        if config_path is None:
-            # Try local config first, fallback to /app/config.yaml for Docker
-            if os.path.exists("config.yaml"):
-                config_path = "config.yaml"
-            elif os.path.exists("/app/config.yaml"):
-                config_path = "/app/config.yaml"
-            else:
-                config_path = "config.yaml"  # Will show "not found" message
+        # Detect if running in Docker
+        self.is_docker = os.path.exists('/.dockerenv') or os.path.exists('/app/config.yaml')
         
-        self.config_path = config_path
+        if config_path is None:
+            if self.is_docker:
+                config_path = "/app/config.yaml"
+            elif os.path.exists("config.yaml"):
+                config_path = "config.yaml"
+            else:
+                config_path = "config.yaml"
+        
         self.config_path = config_path
         self.browser = BrowserConfig()
         self.proxy = ProxyConfig()
         self.paths = PathConfig()
+        
+        # Override paths for Docker
+        if self.is_docker:
+            self.paths.cookies_dir = "/app/cookies"
+            self.paths.logs_dir = "/app/logs"
+            self.paths.screenshots_dir = "/app/logs/screenshots"
         
         self._load_config()
         self._load_env_vars()
@@ -81,8 +87,8 @@ class ConfigService:
                     if hasattr(self.proxy, key):
                         setattr(self.proxy, key, value)
             
-            # Apply paths config
-            if 'paths' in config:
+            # Apply paths config (only if not Docker, Docker paths are set above)
+            if 'paths' in config and not self.is_docker:
                 for key, value in config['paths'].items():
                     if hasattr(self.paths, key):
                         setattr(self.paths, key, value)

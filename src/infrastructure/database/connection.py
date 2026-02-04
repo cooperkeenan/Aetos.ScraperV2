@@ -2,6 +2,10 @@ import logging
 import os
 from typing import Optional
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,6 +17,11 @@ class DatabaseConfig:
         self.database = os.getenv("DB_NAME", "aetos")
         self.user = os.getenv("DB_USER", "postgres")
         self.password = os.getenv("DB_PASSWORD", "")
+        
+        logger.info(f"[DB Config] Host: {self.host}")
+        logger.info(f"[DB Config] Database: {self.database}")
+        logger.info(f"[DB Config] User: {self.user}")
+        logger.info(f"[DB Config] Password loaded: {bool(self.password)}")
 
     def get_connection_string(self) -> str:
         return (
@@ -20,7 +29,8 @@ class DatabaseConfig:
             f"port={self.port} "
             f"dbname={self.database} "
             f"user={self.user} "
-            f"password={self.password}"
+            f"password={self.password} "
+            f"sslmode=require"
         )
 
     def validate(self) -> bool:

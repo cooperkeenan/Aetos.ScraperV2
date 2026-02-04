@@ -1,7 +1,4 @@
-# src/infrastructure/database/repositories/product_repository.py
-"""
-PostgreSQL implementation of Product repository
-"""
+"""PostgreSQL implementation of Product repository"""
 
 import logging
 from typing import Dict, List
@@ -21,7 +18,6 @@ class ProductRepository(IProductRepository):
         self.connection_string = connection_string
 
     def _get_connection(self):
-        """Get database connection"""
         return psycopg2.connect(self.connection_string)
 
     def get_active_products_by_brand(self, brand: str) -> List[Product]:
@@ -43,7 +39,6 @@ class ProductRepository(IProductRepository):
                     products = []
                     for row in rows:
                         product = self._row_to_product(row)
-                        # Load related data
                         product.fuzzy_patterns = self._get_fuzzy_patterns(
                             product.id, cur
                         )
@@ -55,6 +50,58 @@ class ProductRepository(IProductRepository):
 
         except Exception as e:
             logger.error(f"Failed to get products for brand '{brand}': {e}")
+            raise
+
+    def get_all_active_products(self) -> List[Product]:
+        query = """
+            SELECT 
+                p.id, p.brand, p.model, p.full_name, p.category,
+                p.buy_price_min, p.buy_price_max, p.sell_target, p.active
+            FROM products p
+            WHERE p.active = true
+            ORDER BY p.brand, p.model
+        """
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(query)
+                    rows = cur.fetchall()
+
+                    products = []
+                    for row in rows:
+                        product = self._row_to_product(row)
+                        product.fuzzy_patterns = self._get_fuzzy_patterns(
+                            product.id, cur
+                        )
+                        product.aliases = self._get_aliases(product.id, cur)
+                        products.append(product)
+
+                    logger.info(f"Loaded {len(products)} active products")
+                    return products
+
+        except Exception as e:
+            logger.error(f"Failed to get all active products: {e}")
+            raise
+
+    def get_brands(self) -> List[str]:
+        query = """
+            SELECT DISTINCT brand
+            FROM products
+            WHERE active = true
+            ORDER BY brand
+        """
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query)
+                    brands = [row[0] for row in cur.fetchall()]
+                    logger.info(f"Loaded {len(brands)} brands")
+                    return brands
+
+        except Exception as e:
+            logger.error(f"Failed to get brands: {e}")
             raise
 
     def get_global_filter_keywords(self) -> Dict[str, List[str]]:
@@ -89,13 +136,13 @@ class ProductRepository(IProductRepository):
             "SELECT pattern FROM product_fuzzy_patterns WHERE product_id = %s",
             (product_id,),
         )
-        return [row[0] for row in cursor.fetchall()]
+        return [row['pattern'] for row in cursor.fetchall()]
 
     def _get_aliases(self, product_id: int, cursor) -> List[str]:
         cursor.execute(
             "SELECT alias FROM product_aliases WHERE product_id = %s", (product_id,)
         )
-        return [row[0] for row in cursor.fetchall()]
+        return [row['alias'] for row in cursor.fetchall()]
 
     def _row_to_product(self, row: dict) -> Product:
         return Product(

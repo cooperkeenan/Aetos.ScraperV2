@@ -36,20 +36,15 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy configuration and source code
-COPY config.yaml ./
-COPY src/ ./src/
-COPY test_navigation.py ./
-COPY entrypoint.sh ./
-RUN chmod +x /app/entrypoint.sh
-ENTRYPOINT ["/app/entrypoint.sh"]
-
 # Create required directories
 RUN mkdir -p /app/logs /app/screenshots /app/cookies
 
-# Copy environment file and cookies
+# Copy application code
+COPY config.yaml ./
+COPY src/ ./src/
 COPY .env ./
 COPY cookies/ /app/cookies/
 
-# Use entrypoint that writes to both stdout and file
-CMD ["python", "test_navigation.py"]
+EXPOSE 8000
+
+CMD ["uvicorn", "src.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

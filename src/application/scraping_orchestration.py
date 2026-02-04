@@ -7,7 +7,7 @@ from ..core.settings import MatchingSettings, ScrapingSettings
 from ..domain.models.listing import Listing
 from ..domain.models.match_result import MatchResult
 from ..matching.matching_engine import MatchingEngine
-from ..scraping.marketplace_scraper import MarketplaceScraper
+from ..scraper.marketplace_scraper import MarketplaceScraper
 from .product_service import ProductService
 
 logger = logging.getLogger(__name__)
@@ -28,7 +28,6 @@ class ScrapingOrchestrator:
 
         logger.info(f"Starting scrape and match workflow for: {brand}")
 
-        # Step 1: Fetch products for this brand
         logger.info(f"\n[Step 1] Fetching products for brand '{brand}'...")
         products = self.product_service.get_products_for_brand(brand)
 
@@ -44,7 +43,6 @@ class ScrapingOrchestrator:
 
         logger.info(f"Loaded {len(products)} products: {[str(p) for p in products]}")
 
-        # Step 2: Scrape marketplace
         logger.info(f"\n[Step 2] Scraping marketplace for '{brand}'...")
 
         if not self.scraper.search(brand):
@@ -70,7 +68,6 @@ class ScrapingOrchestrator:
                 "stats": {"listings_scraped": 0},
             }
 
-        # Convert dict listings to Listing objects
         listing_objects = [
             Listing(
                 url=l["url"],
@@ -83,25 +80,25 @@ class ScrapingOrchestrator:
             for l in listings
         ]
 
-        # Step 3: Match listings against products
+        # Debug: Show sample listings
+        logger.info(f"\n[Debug] Sample of first 5 listings:")
+        for i, listing in enumerate(listing_objects[:5], 1):
+            logger.info(f"  {i}. Title: '{listing.title}'")
+            logger.info(f"     Price: £{listing.price if listing.price else 'None'}")
+            logger.info(f"     URL: {listing.url[:80]}...")
+
         logger.info(
             f"\n[Step 3] Matching {len(listing_objects)} listings against {len(products)} products..."
         )
 
-        # Get avoid keywords
         avoid_keywords = self.product_service.get_avoid_keywords()
-
-        # Create matching engine
         matching_engine = MatchingEngine(avoid_keywords=avoid_keywords)
-
-        # Run matching
         matches = matching_engine.match_listings(listing_objects, products)
 
         logger.info(
             f"Found {len(matches)} matches above {MatchingSettings.MIN_CONFIDENCE_THRESHOLD}% confidence"
         )
 
-        # Step 4: Generate stats
         stats = self._generate_stats(listing_objects, matches, products)
 
         logger.info(f"\n[Complete] Workflow finished")
@@ -119,9 +116,7 @@ class ScrapingOrchestrator:
     def _generate_stats(
         self, listings: List[Listing], matches: List[MatchResult], products: List
     ) -> Dict[str, Any]:
-        """Generate statistics for the run"""
 
-        # Count matches per product
         matches_per_product = {}
         for match in matches:
             product_id = match.product.id
@@ -129,12 +124,10 @@ class ScrapingOrchestrator:
                 matches_per_product[product_id] = 0
             matches_per_product[product_id] += 1
 
-        # Average confidence
         avg_confidence = (
             sum(m.confidence for m in matches) / len(matches) if matches else 0
         )
 
-        # Listings with/without matches
         matched_listing_urls = {m.listing.url for m in matches}
         unmatched_count = len(
             [l for l in listings if l.url not in matched_listing_urls]
@@ -151,7 +144,6 @@ class ScrapingOrchestrator:
         }
 
     def _listing_to_dict(self, listing: Listing) -> Dict[str, Any]:
-        """Convert Listing object to dict"""
         return {
             "url": listing.url,
             "title": listing.title,

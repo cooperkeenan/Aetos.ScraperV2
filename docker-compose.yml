@@ -11,8 +11,9 @@ services:
       - ./cookies:/app/cookies
       - ./logs:/app/logs
     command: python test_navigation.py
+    profiles:
+      - test
 
-  # Future: API server for receiving scrape requests
   scraper-api:
     build: .
     container_name: aetos-scraper-api
@@ -26,11 +27,9 @@ services:
     volumes:
       - ./cookies:/app/cookies
       - ./logs:/app/logs
-    command: python -m flask run --host=0.0.0.0 --port=8000
-    profiles:
-      - api  # Only start with --profile api
+    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
 
 # Usage:
-# Test scraper:     docker-compose up scraper-test
-# Run API server:   docker-compose --profile api up scraper-api
+# Test scraper:     docker-compose --profile test up scraper-test
+# Run API server:   docker-compose up scraper-api
 # Build only:       docker-compose build
