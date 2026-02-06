@@ -3,7 +3,7 @@ from typing import Any, Dict, List
 
 from selenium import webdriver
 
-from ..core.settings import MatchingSettings, ScrapingSettings
+from ..core.settings import get_settings
 from ..domain.models.listing import Listing
 from ..domain.models.match_result import MatchResult
 from ..matching.matching_engine import MatchingEngine
@@ -22,9 +22,10 @@ class ScrapingOrchestrator:
     def scrape_and_match_brand(
         self, brand: str, max_listings: int = None
     ) -> Dict[str, Any]:
+        settings = get_settings()
 
         if max_listings is None:
-            max_listings = ScrapingSettings.MAX_LISTINGS_DEFAULT
+            max_listings = settings.MAX_LISTINGS_DEFAULT
 
         logger.info(f"Starting scrape and match workflow for: {brand}")
 
@@ -96,7 +97,7 @@ class ScrapingOrchestrator:
         matches = matching_engine.match_listings(listing_objects, products)
 
         logger.info(
-            f"Found {len(matches)} matches above {MatchingSettings.MIN_CONFIDENCE_THRESHOLD}% confidence"
+            f"Found {len(matches)} matches above {settings.MIN_CONFIDENCE_THRESHOLD}% confidence"
         )
 
         stats = self._generate_stats(listing_objects, matches, products)

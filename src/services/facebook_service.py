@@ -10,7 +10,7 @@ from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-from ..core.config_service import ConfigService
+from ..core.settings import Settings
 from .browser_service import BrowserService
 from .session_service import SessionService
 
@@ -22,9 +22,9 @@ class FacebookService:
     """Handles Facebook session restoration"""
 
     def __init__(
-        self, config: ConfigService, browser: BrowserService, session: SessionService
+        self, settings: Settings, browser: BrowserService, session: SessionService
     ):
-        self.config = config
+        self.settings = settings
         self.browser = browser
         self.session = session
         self.driver = None
@@ -147,7 +147,7 @@ class FacebookService:
         """Save current session cookies"""
         try:
             cookies = self.driver.get_cookies()
-            cookie_path = os.path.join(self.config.paths.cookies_dir, "fb_cookies.pkl")
+            cookie_path = os.path.join(self.settings.cookies_dir, "fb_cookies.pkl")
             
             with open(cookie_path, 'wb') as f:
                 pickle.dump(cookies, f)

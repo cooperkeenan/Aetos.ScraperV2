@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import List, Optional
 
-from ...core.settings import MatchingSettings
+from ...core.settings import get_settings
 from .listing import Listing
 from .product import Product
 
@@ -16,7 +16,8 @@ class MatchResult:
     reasons: List[str] = field(default_factory=list)
 
     def is_confident_match(self) -> bool:
-        return self.confidence >= MatchingSettings.MIN_CONFIDENCE_THRESHOLD
+        settings = get_settings()
+        return self.confidence >= settings.MIN_CONFIDENCE_THRESHOLD
 
     def add_reason(self, reason: str) -> None:
         self.reasons.append(reason)

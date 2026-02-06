@@ -3,11 +3,9 @@ from typing import Dict
 
 from ..application.product_service import ProductService
 from ..application.scraping_orchestration import ScrapingOrchestrator
-from ..core.config_service import get_config
+from ..core.settings import get_settings
 from ..infrastructure.database.connection import get_connection_string
-from ..infrastructure.database.repositories.product_repository import (
-    ProductRepository,
-)
+from ..infrastructure.database.repositories.product_repository import ProductRepository
 from ..services.browser_service import BrowserService
 from ..services.facebook_service import FacebookService
 from ..services.proxy_service import ProxyService
@@ -28,16 +26,16 @@ class SessionExecutor:
         self.jobs[job_id].status = JobStatus.RUNNING
 
         try:
-            config = get_config()
+            settings = get_settings()
             connection_string = get_connection_string()
 
             product_repository = ProductRepository(connection_string)
             product_service = ProductService(product_repository)
 
-            proxy_service = ProxyService() if config.proxy.enabled else None
-            browser = BrowserService(config, proxy_service)
-            session = SessionService(config)
-            facebook = FacebookService(config, browser, session)
+            proxy_service = ProxyService() if settings.proxy_enabled else None
+            browser = BrowserService(settings, proxy_service)
+            session = SessionService(settings)
+            facebook = FacebookService(settings, browser, session)
 
             with browser:
                 if not facebook.restore_session():

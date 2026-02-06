@@ -28,6 +28,7 @@ az container create \
   --cpu 2 \
   --memory 4 \
   --environment-variables \
+    API_KEY=${API_KEY:-aetos-production-key-2024} \
     DB_HOST=ep-broad-fire-a8ngftkc-pooler.eastus2.azure.neon.tech \
     DB_PORT=5432 \
     DB_NAME=neondb \
@@ -47,7 +48,10 @@ echo ""
 echo "API URL: http://aetos-scraper.$LOCATION.azurecontainer.io:8000"
 echo "API Docs: http://aetos-scraper.$LOCATION.azurecontainer.io:8000/docs"
 echo ""
+echo "🔑 API Key: ${API_KEY:-aetos-production-key-2024}"
+echo ""
 echo "Test scrape:"
 echo "curl -X POST http://aetos-scraper.$LOCATION.azurecontainer.io:8000/scrape \\"
 echo "  -H 'Content-Type: application/json' \\"
+echo "  -H 'X-API-Key: ${API_KEY:-aetos-production-key-2024}' \\"
 echo "  -d '{\"brand\":\"Canon\"}'"
