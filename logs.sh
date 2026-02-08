@@ -42,7 +42,8 @@ echo ""
 az container logs \
   --resource-group $RESOURCE_GROUP \
   --name $CONTAINER_NAME \
-  --tail 20 2>/dev/null
+  --container-name $CONTAINER_NAME \
+  --output tsv | tail -n 20
 
 echo ""
 echo "📋 Now streaming new logs..."
@@ -55,7 +56,9 @@ sleep 3
 # Try streaming - if it fails, fall back to polling
 az container logs --follow \
   --resource-group $RESOURCE_GROUP \
-  --name $CONTAINER_NAME 2>/dev/null || {
+  --name $CONTAINER_NAME \
+  --container-name $CONTAINER_NAME \
+  --output tsv || {
     echo ""
     echo "⚠️  Streaming failed, using polling mode instead..."
     echo ""
@@ -68,7 +71,8 @@ az container logs --follow \
       az container logs \
         --resource-group $RESOURCE_GROUP \
         --name $CONTAINER_NAME \
-        --tail 50
+        --container-name $CONTAINER_NAME \
+        --output tsv | tail -n 50
       sleep 3
     done
   }
