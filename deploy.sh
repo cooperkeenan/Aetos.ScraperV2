@@ -14,6 +14,39 @@ az acr build \
   --file Dockerfile \
   .
 
+echo ""
+echo "🗑️  Checking for existing container..."
+if az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --output none 2>/dev/null; then
+  echo "⚠️  Found existing container '$CONTAINER_NAME', deleting..."
+  az container delete \
+    --resource-group $RESOURCE_GROUP \
+    --name $CONTAINER_NAME \
+    --yes \
+    --output none
+  
+  # Wait for deletion to complete
+  echo "⏳ Waiting for deletion to complete..."
+  sleep 10
+  
+  # Verify it's gone
+  MAX_WAIT=30
+  WAITED=0
+  while az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --output none 2>/dev/null; do
+    if [ $WAITED -ge $MAX_WAIT ]; then
+      echo "❌ Deletion timeout - container still exists after ${MAX_WAIT}s"
+      exit 1
+    fi
+    echo "   Still deleting... (${WAITED}s)"
+    sleep 5
+    WAITED=$((WAITED + 5))
+  done
+  
+  echo "✅ Old container deleted successfully"
+else
+  echo "✅ No existing container found"
+fi
+
+echo ""
 echo "🚀 Deploying API to Azure Container Instances..."
 az container create \
   --resource-group $RESOURCE_GROUP \

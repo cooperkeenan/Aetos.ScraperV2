@@ -20,10 +20,10 @@ class ScrapingOrchestrator:
         self.scraper = MarketplaceScraper(driver)
 
     def scrape_and_match_brand(
-        self, brand: str, max_listings: int = None
+        self, brand: str, max_listings: int = None, require_price_match: bool = True
     ) -> Dict[str, Any]:
         settings = get_settings()
-
+        
         if max_listings is None:
             max_listings = settings.MAX_LISTINGS_DEFAULT
 
@@ -94,11 +94,24 @@ class ScrapingOrchestrator:
 
         avoid_keywords = self.product_service.get_avoid_keywords()
         matching_engine = MatchingEngine(avoid_keywords=avoid_keywords)
-        matches = matching_engine.match_listings(listing_objects, products)
+        all_matches = matching_engine.match_listings(listing_objects, products)
 
         logger.info(
-            f"Found {len(matches)} matches above {settings.MIN_CONFIDENCE_THRESHOLD}% confidence"
+            f"Found {len(all_matches)} matches above {settings.MIN_CONFIDENCE_THRESHOLD}% confidence"
         )
+        
+        # Apply price filtering if requested
+        if require_price_match:
+            matches = [m for m in all_matches if m.has_price_match()]
+            logger.info(
+                f"Filtered to {len(matches)} matches with price match (price within acceptable range)"
+            )
+        else:
+            matches = all_matches
+            price_matched = len([m for m in matches if m.has_price_match()])
+            logger.info(
+                f"Keeping all matches ({price_matched} have price match, {len(matches) - price_matched} do not)"
+            )
 
         stats = self._generate_stats(listing_objects, matches, products)
 
@@ -153,3 +166,11 @@ class ScrapingOrchestrator:
             "location": listing.location,
             "scraped_at": listing.scraped_at,
         }
+
+        INFO:src.services.browser_service:[Browser] ✅ Stealth patches applied
+INFO:src.services.proxy_service:[Proxy] Using sticky session: cde9b61e
+INFO:src.services.proxy_service:[Proxy] Testing proxy: http://fSlhwsc42Ar5tRdI:0CAUxP7NxySHwelp_country-g...
+INFO:src.services.proxy_service:[Proxy] ✅ Proxy IP: 2.99.72.70
+INFO:src.services.browser_service:[Browser] ✅ Stealth Chrome driver ready
+INFO:src.services.session_service:[Session] Loaded 4 cookies
+INFO:src.services.session_service:[Session] Cookies valid

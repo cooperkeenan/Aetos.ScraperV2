@@ -5,7 +5,9 @@ from ..application.product_service import ProductService
 from ..application.scraping_orchestration import ScrapingOrchestrator
 from ..core.settings import get_settings
 from ..infrastructure.database.connection import get_connection_string
-from ..infrastructure.database.repositories.product_repository import ProductRepository
+from ..infrastructure.database.repositories.product_repository import (
+    ProductRepository,
+)
 from ..services.browser_service import BrowserService
 from ..services.facebook_service import FacebookService
 from ..services.proxy_service import ProxyService
@@ -20,7 +22,7 @@ class SessionExecutor:
     def __init__(self, jobs: Dict[str, JobStatusResponse]):
         self.jobs = jobs
 
-    def execute(self, job_id: str, brand: str):
+    def execute(self, job_id: str, brand: str, require_price_match: bool = True):
         logger.info(f"[Job {job_id}] Starting scrape for brand: {brand}")
 
         self.jobs[job_id].status = JobStatus.RUNNING
@@ -45,7 +47,10 @@ class SessionExecutor:
                     product_service, browser.get_driver()
                 )
 
-                result = orchestrator.scrape_and_match_brand(brand, max_listings=200)
+                result = orchestrator.scrape_and_match_brand(
+                    brand, 
+                    require_price_match=require_price_match
+                )
 
                 self.jobs[job_id].status = JobStatus.COMPLETED
                 self.jobs[job_id].result = result

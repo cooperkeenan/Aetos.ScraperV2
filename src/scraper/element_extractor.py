@@ -33,7 +33,14 @@ class ElementExtractor:
             img_elements = element.find_elements(By.TAG_NAME, "img")
             for img in img_elements:
                 alt = img.get_attribute("alt")
-                if alt and alt.strip() and not alt.startswith("£"):
+                if alt and alt.strip():
+                    # Skip if it's just a price (e.g., "£395" or "£1,250")
+                    if re.match(r"^£\s*\d+(?:,\d{3})*$", alt.strip()):
+                        continue
+                    # Skip if it starts with price
+                    if alt.strip().startswith("£"):
+                        continue
+                    # Remove location suffix (e.g., "Camera in Edinburgh")
                     title = re.sub(r"\s+in\s+[\w\s,]+$", "", alt)
                     return title.strip()
         except:

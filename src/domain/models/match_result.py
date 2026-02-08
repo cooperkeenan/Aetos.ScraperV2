@@ -14,10 +14,19 @@ class MatchResult:
     product: Product
     confidence: float  # 0-100
     reasons: List[str] = field(default_factory=list)
+    
+    # Component scores for filtering
+    title_score: float = 0.0
+    price_score: float = 0.0
+    keyword_score: float = 0.0
 
     def is_confident_match(self) -> bool:
         settings = get_settings()
         return self.confidence >= settings.MIN_CONFIDENCE_THRESHOLD
+    
+    def has_price_match(self) -> bool:
+        """Check if the price was within acceptable range"""
+        return self.price_score > 0
 
     def add_reason(self, reason: str) -> None:
         self.reasons.append(reason)
@@ -43,6 +52,11 @@ class MatchResult:
                 "full_name": self.product.full_name,
             },
             "confidence": round(self.confidence, 2),
+            "match_breakdown": {
+                "title_score": round(self.title_score, 2),
+                "price_score": round(self.price_score, 2),
+                "keyword_score": round(self.keyword_score, 2),
+            },
             "reasons": self.reasons,
             "potential_profit": float(profit) if profit is not None else None,
         }
