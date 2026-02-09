@@ -34,33 +34,50 @@ class MatchingEngine:
     def match_listing(
         self, listing: Listing, products: List[Product]
     ) -> List[MatchResult]:
-        results = []
+        """
+        Match a single listing against all products
+        Returns list with ONLY the best match (or empty if no good matches)
+        """
+        all_results = []
 
         for product in products:
             result = self._match_single(listing, product)
             if result and result.is_confident_match():
-                results.append(result)
+                all_results.append(result)
 
-        results.sort(key=lambda r: r.confidence, reverse=True)
-        return results
+        # Sort by confidence and return ONLY the best match
+        if all_results:
+            all_results.sort(key=lambda r: r.confidence, reverse=True)
+            best_match = all_results[0]
+
+            logger.info(
+                f"[Match] Best match for '{listing.title[:50]}': "
+                f"{best_match.product.model} ({best_match.confidence:.0f}%)"
+            )
+
+            return [best_match]  # Only return the single best match
+
+        return []
 
     def match_listings(
         self, listings: List[Listing], products: List[Product]
     ) -> List[MatchResult]:
         all_results = []
 
-        logger.info(f"\n[Matching Debug] Testing first 3 listings:")
-        for i, listing in enumerate(listings[:3], 1):
-            logger.info(f"\n  Listing {i}: '{listing.title}'")
-            logger.info(f"  Price: £{listing.price if listing.price else 'None'}")
+        logger.info(
+            f"\n[Matching] Processing {len(listings)} listings against {len(products)} products"
+        )
 
-        for listing in listings:
+        for i, listing in enumerate(listings, 1):
+            if i <= 3:
+                logger.info(f"\n  Listing {i}: '{listing.title}'")
+                logger.info(f"  Price: £{listing.price if listing.price else 'None'}")
+
             matches = self.match_listing(listing, products)
             all_results.extend(matches)
 
         logger.info(
-            f"Matched {len(listings)} listings against {len(products)} products - "
-            f"Found {len(all_results)} total matches"
+            f"\n[Matching] Found {len(all_results)} total matches from {len(listings)} listings"
         )
 
         return all_results
@@ -80,7 +97,7 @@ class MatchingEngine:
         price_score, price_reason = self.price_matcher.match(listing, product)
 
         # Quick reject if title or price completely fail
-        if title_score < 40 or price_score == 0:
+        if title_score < 60 or price_score == 0:
             return None
 
         # Phase 1.5: Check title for reject keywords (before fetching description)
@@ -88,7 +105,9 @@ class MatchingEngine:
             listing, product
         )
         if initial_keyword_score == 0:
-            logger.info(f"[Match] Rejected by title keywords: {initial_keyword_reason}")
+            logger.debug(
+                f"[Match] Rejected by title keywords: {initial_keyword_reason}"
+            )
             return None
 
         # Phase 2: Fetch description for promising matches
