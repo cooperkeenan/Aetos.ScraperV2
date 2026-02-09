@@ -6,6 +6,14 @@ from .base_matcher import BaseMatcher
 
 
 class KeywordFilter(BaseMatcher):
+    """
+    Filters listings based on reject/boost keywords in title and description
+
+    Scoring:
+    - Reject keyword found: 0 (immediate rejection)
+    - No reject keywords: 100
+    - Boost keywords add confidence later in matching engine
+    """
 
     def __init__(self, reject_keywords: List[str], boost_keywords: List[str]):
         self.reject_keywords = [kw.lower() for kw in reject_keywords]
@@ -13,11 +21,11 @@ class KeywordFilter(BaseMatcher):
 
     def match(self, listing: Listing, product: Product) -> Tuple[float, str]:
         """Check title and description for reject keywords"""
-        
+
         title = listing.get_title_normalized()
-        description = getattr(listing, 'description', '') or ''
+        description = getattr(listing, "description", "") or ""
         description = description.lower()
-        
+
         combined_text = f"{title} {description}".strip()
 
         if not combined_text:
@@ -42,14 +50,14 @@ class KeywordFilter(BaseMatcher):
     def count_boost_keywords(self, listing: Listing) -> int:
         """Count boost keywords in title and description"""
         title = listing.get_title_normalized()
-        description = getattr(listing, 'description', '') or ''
+        description = getattr(listing, "description", "") or ""
         description = description.lower()
-        
+
         combined_text = f"{title} {description}"
-        
+
         count = 0
         for keyword in self.boost_keywords:
             if keyword in combined_text:
                 count += 1
-        
+
         return count

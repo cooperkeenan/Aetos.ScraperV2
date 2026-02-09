@@ -8,7 +8,7 @@ class IListingRepository(ABC):
 
     @abstractmethod
     def upsert_listing(
-        self, 
+        self,
         url: str,
         title: Optional[str] = None,
         price: Optional[float] = None,
@@ -16,13 +16,13 @@ class IListingRepository(ABC):
         image_url: Optional[str] = None,
         description: Optional[str] = None,
         product_id: Optional[int] = None,
-        match_confidence: Optional[float] = None
+        match_confidence: Optional[float] = None,
     ) -> int:
         """
         Insert or update listing
         - If URL exists: update last_seen_at, times_seen, and other fields if provided
         - If URL is new: insert new record
-        
+
         Returns listing_id
         """
         pass

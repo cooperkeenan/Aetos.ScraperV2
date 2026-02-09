@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import List, Optional, Set
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -86,8 +86,8 @@ class ListingRepository(IListingRepository):
                     )
                     listing_id = cur.fetchone()[0]
                     conn.commit()
-                    
-                    logger.info(f"Upserted listing {listing_id}: {url[:50]}...")
+
+                    logger.debug(f"Upserted listing {listing_id}: {url[:50]}...")
                     return listing_id
 
         except Exception as e:
@@ -116,15 +116,46 @@ class ListingRepository(IListingRepository):
                             location=row["location"],
                             image_url=row["image_url"],
                             description=row["description"],
-                            scraped_at=row["first_seen_at"].timestamp()
-                            if row["first_seen_at"]
-                            else None,
+                            scraped_at=(
+                                row["first_seen_at"].timestamp()
+                                if row["first_seen_at"]
+                                else None
+                            ),
                         )
                     return None
 
         except Exception as e:
             logger.error(f"Failed to get listing {url}: {e}")
             return None
+
+    def get_analyzed_urls(self, urls: List[str]) -> Set[str]:
+        """
+        Check which URLs have already been analyzed (have product_id)
+        Returns set of URLs that already have a product match
+        """
+        if not urls:
+            return set()
+
+        query = """
+            SELECT url 
+            FROM listings 
+            WHERE url = ANY(%s) AND product_id IS NOT NULL
+        """
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(query, (urls,))
+                    analyzed_urls = {row[0] for row in cur.fetchall()}
+
+                    logger.info(
+                        f"Found {len(analyzed_urls)} already analyzed URLs out of {len(urls)}"
+                    )
+                    return analyzed_urls
+
+        except Exception as e:
+            logger.error(f"Failed to check analyzed URLs: {e}")
+            return set()
 
     def mark_as_sold(self, listing_id: int) -> bool:
         query = "UPDATE listings SET status = 'sold' WHERE id = %s"
@@ -164,9 +195,11 @@ class ListingRepository(IListingRepository):
                             location=row["location"],
                             image_url=row["image_url"],
                             description=row["description"],
-                            scraped_at=row["first_seen_at"].timestamp()
-                            if row["first_seen_at"]
-                            else None,
+                            scraped_at=(
+                                row["first_seen_at"].timestamp()
+                                if row["first_seen_at"]
+                                else None
+                            ),
                         )
                         for row in rows
                     ]
@@ -198,9 +231,11 @@ class ListingRepository(IListingRepository):
                             location=row["location"],
                             image_url=row["image_url"],
                             description=row["description"],
-                            scraped_at=row["first_seen_at"].timestamp()
-                            if row["first_seen_at"]
-                            else None,
+                            scraped_at=(
+                                row["first_seen_at"].timestamp()
+                                if row["first_seen_at"]
+                                else None
+                            ),
                         )
                         for row in rows
                     ]

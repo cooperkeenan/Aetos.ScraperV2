@@ -93,7 +93,9 @@ class ScrapingOrchestrator:
         ]
 
         # Save all scraped listings to database (just URL/title/price at this point)
-        logger.info(f"\n[Step 2.5] Saving {len(listing_objects)} listings to database...")
+        logger.info(
+            f"\n[Step 2.5] Saving {len(listing_objects)} listings to database..."
+        )
         for listing in listing_objects:
             try:
                 self.listing_repository.upsert_listing(
@@ -110,9 +112,9 @@ class ScrapingOrchestrator:
         logger.info(f"\n[Step 2.6] Checking for already analyzed listings...")
         all_urls = [l.url for l in listing_objects]
         analyzed_urls = self.listing_repository.get_analyzed_urls(all_urls)
-        
+
         new_listings = [l for l in listing_objects if l.url not in analyzed_urls]
-        
+
         logger.info(
             f"Skipping {len(analyzed_urls)} already analyzed listings, "
             f"processing {len(new_listings)} new ones"
@@ -167,7 +169,9 @@ class ScrapingOrchestrator:
             )
 
         # Update matched listings with product info
-        logger.info(f"\n[Step 4] Updating {len(matches)} matched listings in database...")
+        logger.info(
+            f"\n[Step 4] Updating {len(matches)} matched listings in database..."
+        )
         for match in matches:
             try:
                 self.listing_repository.upsert_listing(
@@ -181,9 +185,13 @@ class ScrapingOrchestrator:
                     match_confidence=match.confidence,
                 )
             except Exception as e:
-                logger.warning(f"Failed to update matched listing {match.listing.url}: {e}")
+                logger.warning(
+                    f"Failed to update matched listing {match.listing.url}: {e}"
+                )
 
-        stats = self._generate_stats(listing_objects, new_listings, matches, products, len(analyzed_urls))
+        stats = self._generate_stats(
+            listing_objects, new_listings, matches, products, len(analyzed_urls)
+        )
 
         logger.info(f"\n[Complete] Workflow finished")
         logger.info(f"Stats: {stats}")
@@ -197,12 +205,12 @@ class ScrapingOrchestrator:
         }
 
     def _generate_stats(
-        self, 
+        self,
         all_listings: List[Listing],
-        analyzed_listings: List[Listing], 
-        matches: List[MatchResult], 
+        analyzed_listings: List[Listing],
+        matches: List[MatchResult],
         products: List,
-        skipped_count: int
+        skipped_count: int,
     ) -> Dict[str, Any]:
 
         matches_per_product = {}
