@@ -25,7 +25,7 @@ class Settings:
     KEYWORD_WEIGHT: float = 0.1
 
     # Scraping
-    MAX_LISTINGS_DEFAULT: int = 1000
+    MAX_LISTINGS_DEFAULT: int = 400
 
     # API
     api_key: str = "your-secret-key-change-me"
