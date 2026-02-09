@@ -1,5 +1,5 @@
 import logging
-from typing import List
+from typing import Dict, List
 
 from ..domain.models.product import Product
 from ..domain.repositories.i_product_repository import IProductRepository
@@ -19,10 +19,15 @@ class ProductService:
         logger.info(f"Found {len(products)} products for {brand}")
         return products
 
-    def get_avoid_keywords(self) -> List[str]:
-        """Get global avoid keywords"""
-        logger.info("Fetching avoid keywords")
+    def get_filter_keywords(self) -> Dict[str, List[str]]:
+        """Get all filter keywords (reject and boost)"""
+        logger.info("Fetching filter keywords")
         keywords_dict = self.product_repository.get_global_filter_keywords()
-        avoid_keywords = keywords_dict.get("reject", [])
-        logger.info(f"Loaded {len(avoid_keywords)} reject keywords: {avoid_keywords[:5] if avoid_keywords else []}")
-        return avoid_keywords
+        
+        reject = keywords_dict.get("reject", [])
+        boost = keywords_dict.get("boost", [])
+        
+        logger.info(f"Loaded {len(reject)} reject keywords: {reject[:5] if reject else []}")
+        logger.info(f"Loaded {len(boost)} boost keywords: {boost[:5] if boost else []}")
+        
+        return keywords_dict

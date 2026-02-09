@@ -13,6 +13,7 @@ class JobStatus(str, Enum):
 
 class ScrapeRequest(BaseModel):
     brand: str
+    search: Optional[str] = None
 
 
 class ScrapeResponse(BaseModel):

@@ -47,15 +47,17 @@ class ScraperAPI:
         def scrape_brand(request: ScrapeRequest, background_tasks: BackgroundTasks):  # type: ignore
             job_id = str(uuid.uuid4())
 
+            search_term = request.search if request.search else request.brand
+
             self.jobs[job_id] = JobStatusResponse(
                 job_id=job_id, status=JobStatus.PENDING, brand=request.brand
             )
 
             background_tasks.add_task(
-                self.session_executor.execute, job_id, request.brand
+                self.session_executor.execute, job_id, request.brand, search_term
             )
 
-            logger.info(f"Created scrape job {job_id} for brand: {request.brand}")
+            logger.info(f"Created scrape job {job_id} for brand: {request.brand}, search: {search_term}")
 
             return ScrapeResponse(
                 job_id=job_id,
@@ -82,6 +84,5 @@ class ScraperAPI:
             return self.jobs
 
 
-# Create API instance
 api = ScraperAPI()
 app = api.app

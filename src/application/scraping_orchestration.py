@@ -6,6 +6,7 @@ from selenium import webdriver
 from ..core.settings import get_settings
 from ..domain.models.listing import Listing
 from ..domain.models.match_result import MatchResult
+from ..domain.repositories.i_listing_repository import IListingRepository
 from ..matching.matching_engine import MatchingEngine
 from ..scraper.marketplace_scraper import MarketplaceScraper
 from .product_service import ProductService
@@ -15,19 +16,32 @@ logger = logging.getLogger(__name__)
 
 class ScrapingOrchestrator:
 
-    def __init__(self, product_service: ProductService, driver: webdriver.Chrome):
+    def __init__(
+        self,
+        product_service: ProductService,
+        driver: webdriver.Chrome,
+        listing_repository: IListingRepository,
+    ):
         self.product_service = product_service
+        self.driver = driver
         self.scraper = MarketplaceScraper(driver)
+        self.listing_repository = listing_repository
 
     def scrape_and_match_brand(
-        self, brand: str, max_listings: int = None, require_price_match: bool = True
+        self,
+        brand: str,
+        search_term: str,
+        max_listings: int = None,
+        require_price_match: bool = True,
     ) -> Dict[str, Any]:
         settings = get_settings()
-        
+
         if max_listings is None:
             max_listings = settings.MAX_LISTINGS_DEFAULT
 
-        logger.info(f"Starting scrape and match workflow for: {brand}")
+        logger.info(
+            f"Starting scrape and match workflow for brand: {brand}, search: {search_term}"
+        )
 
         logger.info(f"\n[Step 1] Fetching products for brand '{brand}'...")
         products = self.product_service.get_products_for_brand(brand)
@@ -37,21 +51,19 @@ class ScrapingOrchestrator:
             return {
                 "brand": brand,
                 "products_count": 0,
-                "listings": [],
                 "matches": [],
                 "stats": {"error": "No products found"},
             }
 
         logger.info(f"Loaded {len(products)} products: {[str(p) for p in products]}")
 
-        logger.info(f"\n[Step 2] Scraping marketplace for '{brand}'...")
+        logger.info(f"\n[Step 2] Scraping marketplace for '{search_term}'...")
 
-        if not self.scraper.search(brand):
-            logger.error(f"Failed to search marketplace for '{brand}'")
+        if not self.scraper.search(search_term):
+            logger.error(f"Failed to search marketplace for '{search_term}'")
             return {
                 "brand": brand,
                 "products_count": len(products),
-                "listings": [],
                 "matches": [],
                 "stats": {"error": "Search failed"},
             }
@@ -64,7 +76,6 @@ class ScrapingOrchestrator:
             return {
                 "brand": brand,
                 "products_count": len(products),
-                "listings": [],
                 "matches": [],
                 "stats": {"listings_scraped": 0},
             }
@@ -81,26 +92,68 @@ class ScrapingOrchestrator:
             for l in listings
         ]
 
-        # Debug: Show sample listings
-        logger.info(f"\n[Debug] Sample of first 5 listings:")
-        for i, listing in enumerate(listing_objects[:5], 1):
+        # Save all scraped listings to database (just URL/title/price at this point)
+        logger.info(f"\n[Step 2.5] Saving {len(listing_objects)} listings to database...")
+        for listing in listing_objects:
+            try:
+                self.listing_repository.upsert_listing(
+                    url=listing.url,
+                    title=listing.title,
+                    price=listing.price,
+                    location=listing.location,
+                    image_url=listing.image_url,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to save listing {listing.url}: {e}")
+
+        # Filter out already analyzed listings
+        logger.info(f"\n[Step 2.6] Checking for already analyzed listings...")
+        all_urls = [l.url for l in listing_objects]
+        analyzed_urls = self.listing_repository.get_analyzed_urls(all_urls)
+        
+        new_listings = [l for l in listing_objects if l.url not in analyzed_urls]
+        
+        logger.info(
+            f"Skipping {len(analyzed_urls)} already analyzed listings, "
+            f"processing {len(new_listings)} new ones"
+        )
+
+        if not new_listings:
+            logger.info("No new listings to analyze")
+            return {
+                "brand": brand,
+                "products_count": len(products),
+                "matches": [],
+                "stats": {
+                    "listings_scraped": len(listing_objects),
+                    "listings_skipped": len(analyzed_urls),
+                    "listings_analyzed": 0,
+                },
+            }
+
+        logger.info(f"\n[Debug] Sample of first 5 new listings:")
+        for i, listing in enumerate(new_listings[:5], 1):
             logger.info(f"  {i}. Title: '{listing.title}'")
             logger.info(f"     Price: £{listing.price if listing.price else 'None'}")
             logger.info(f"     URL: {listing.url[:80]}...")
 
         logger.info(
-            f"\n[Step 3] Matching {len(listing_objects)} listings against {len(products)} products..."
+            f"\n[Step 3] Matching {len(new_listings)} listings against {len(products)} products..."
         )
 
-        avoid_keywords = self.product_service.get_avoid_keywords()
-        matching_engine = MatchingEngine(avoid_keywords=avoid_keywords)
-        all_matches = matching_engine.match_listings(listing_objects, products)
+        keywords = self.product_service.get_filter_keywords()
+        matching_engine = MatchingEngine(
+            driver=self.driver,
+            reject_keywords=keywords.get("reject", []),
+            boost_keywords=keywords.get("boost", []),
+        )
+
+        all_matches = matching_engine.match_listings(new_listings, products)
 
         logger.info(
             f"Found {len(all_matches)} matches above {settings.MIN_CONFIDENCE_THRESHOLD}% confidence"
         )
-        
-        # Apply price filtering if requested
+
         if require_price_match:
             matches = [m for m in all_matches if m.has_price_match()]
             logger.info(
@@ -113,7 +166,24 @@ class ScrapingOrchestrator:
                 f"Keeping all matches ({price_matched} have price match, {len(matches) - price_matched} do not)"
             )
 
-        stats = self._generate_stats(listing_objects, matches, products)
+        # Update matched listings with product info
+        logger.info(f"\n[Step 4] Updating {len(matches)} matched listings in database...")
+        for match in matches:
+            try:
+                self.listing_repository.upsert_listing(
+                    url=match.listing.url,
+                    title=match.listing.title,
+                    price=match.listing.price,
+                    location=match.listing.location,
+                    image_url=match.listing.image_url,
+                    description=match.listing.description,
+                    product_id=match.product.id,
+                    match_confidence=match.confidence,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update matched listing {match.listing.url}: {e}")
+
+        stats = self._generate_stats(listing_objects, new_listings, matches, products, len(analyzed_urls))
 
         logger.info(f"\n[Complete] Workflow finished")
         logger.info(f"Stats: {stats}")
@@ -122,13 +192,17 @@ class ScrapingOrchestrator:
         return {
             "brand": brand,
             "products_count": len(products),
-            "listings": [self._listing_to_dict(l) for l in listing_objects],
             "matches": [m.to_dict() for m in matches],
             "stats": stats,
         }
 
     def _generate_stats(
-        self, listings: List[Listing], matches: List[MatchResult], products: List
+        self, 
+        all_listings: List[Listing],
+        analyzed_listings: List[Listing], 
+        matches: List[MatchResult], 
+        products: List,
+        skipped_count: int
     ) -> Dict[str, Any]:
 
         matches_per_product = {}
@@ -144,11 +218,13 @@ class ScrapingOrchestrator:
 
         matched_listing_urls = {m.listing.url for m in matches}
         unmatched_count = len(
-            [l for l in listings if l.url not in matched_listing_urls]
+            [l for l in analyzed_listings if l.url not in matched_listing_urls]
         )
 
         return {
-            "listings_scraped": len(listings),
+            "listings_scraped": len(all_listings),
+            "listings_skipped": skipped_count,
+            "listings_analyzed": len(analyzed_listings),
             "total_matches": len(matches),
             "unique_listings_matched": len(matched_listing_urls),
             "unmatched_listings": unmatched_count,
@@ -156,21 +232,3 @@ class ScrapingOrchestrator:
             "products_with_matches": len(matches_per_product),
             "matches_per_product": matches_per_product,
         }
-
-    def _listing_to_dict(self, listing: Listing) -> Dict[str, Any]:
-        return {
-            "url": listing.url,
-            "title": listing.title,
-            "price": listing.price,
-            "image_url": listing.image_url,
-            "location": listing.location,
-            "scraped_at": listing.scraped_at,
-        }
-
-        INFO:src.services.browser_service:[Browser] ✅ Stealth patches applied
-INFO:src.services.proxy_service:[Proxy] Using sticky session: cde9b61e
-INFO:src.services.proxy_service:[Proxy] Testing proxy: http://fSlhwsc42Ar5tRdI:0CAUxP7NxySHwelp_country-g...
-INFO:src.services.proxy_service:[Proxy] ✅ Proxy IP: 2.99.72.70
-INFO:src.services.browser_service:[Browser] ✅ Stealth Chrome driver ready
-INFO:src.services.session_service:[Session] Loaded 4 cookies
-INFO:src.services.session_service:[Session] Cookies valid

@@ -5,6 +5,9 @@ from ..application.product_service import ProductService
 from ..application.scraping_orchestration import ScrapingOrchestrator
 from ..core.settings import get_settings
 from ..infrastructure.database.connection import get_connection_string
+from ..infrastructure.database.repositories.listing_repository import (
+    ListingRepository,
+)
 from ..infrastructure.database.repositories.product_repository import (
     ProductRepository,
 )
@@ -22,8 +25,12 @@ class SessionExecutor:
     def __init__(self, jobs: Dict[str, JobStatusResponse]):
         self.jobs = jobs
 
-    def execute(self, job_id: str, brand: str, require_price_match: bool = True):
-        logger.info(f"[Job {job_id}] Starting scrape for brand: {brand}")
+    def execute(
+        self, job_id: str, brand: str, search_term: str, require_price_match: bool = True
+    ):
+        logger.info(
+            f"[Job {job_id}] Starting scrape for brand: {brand}, search: {search_term}"
+        )
 
         self.jobs[job_id].status = JobStatus.RUNNING
 
@@ -32,6 +39,8 @@ class SessionExecutor:
             connection_string = get_connection_string()
 
             product_repository = ProductRepository(connection_string)
+            listing_repository = ListingRepository(connection_string)
+            
             product_service = ProductService(product_repository)
 
             proxy_service = ProxyService() if settings.proxy_enabled else None
@@ -44,12 +53,13 @@ class SessionExecutor:
                     raise Exception("Failed to restore Facebook session")
 
                 orchestrator = ScrapingOrchestrator(
-                    product_service, browser.get_driver()
+                    product_service, 
+                    browser.get_driver(),
+                    listing_repository
                 )
 
                 result = orchestrator.scrape_and_match_brand(
-                    brand, 
-                    require_price_match=require_price_match
+                    brand, search_term, require_price_match=require_price_match
                 )
 
                 self.jobs[job_id].status = JobStatus.COMPLETED

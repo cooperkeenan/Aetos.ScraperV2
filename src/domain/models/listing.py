@@ -12,6 +12,7 @@ class Listing:
     image_url: Optional[str]
     location: Optional[str]
     scraped_at: Optional[float] = None
+    description: Optional[str] = None
 
     def has_price(self) -> bool:
         return self.price is not None and self.price > 0
