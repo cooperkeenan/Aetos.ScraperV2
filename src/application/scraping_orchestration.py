@@ -26,61 +26,73 @@ class ScrapingOrchestrator:
         self.driver = driver
         self.scraper = MarketplaceScraper(driver)
         self.listing_repository = listing_repository
+        self.settings = get_settings()
 
     def scrape_and_match_brand(
         self,
         brand: str,
         search_term: str,
-        max_listings: int = None,
         require_price_match: bool = True,
     ) -> Dict[str, Any]:
-        settings = get_settings()
+        logger.info(f"Starting scrape for brand: {brand}, search: {search_term}")
 
-        if max_listings is None:
-            max_listings = settings.MAX_LISTINGS_DEFAULT
-
-        logger.info(
-            f"Starting scrape and match workflow for brand: {brand}, search: {search_term}"
-        )
-
-        logger.info(f"\n[Step 1] Fetching products for brand '{brand}'...")
-        products = self.product_service.get_products_for_brand(brand)
-
+        # Step 1: Load products
+        products = self._load_products(brand)
         if not products:
-            logger.warning(f"No active products found for brand '{brand}'")
-            return {
-                "brand": brand,
-                "products_count": 0,
-                "matches": [],
-                "stats": {"error": "No products found"},
-            }
+            return self._create_error_response(brand, "No products found")
 
-        logger.info(f"Loaded {len(products)} products: {[str(p) for p in products]}")
-
-        logger.info(f"\n[Step 2] Scraping marketplace for '{search_term}'...")
-
-        if not self.scraper.search(search_term):
-            logger.error(f"Failed to search marketplace for '{search_term}'")
-            return {
-                "brand": brand,
-                "products_count": len(products),
-                "matches": [],
-                "stats": {"error": "Search failed"},
-            }
-
-        listings = self.scraper.collect_listings(max_listings)
-        logger.info(f"Scraped {len(listings)} listings")
-
+        # Step 2: Scrape marketplace
+        listings = self._scrape_marketplace(search_term)
         if not listings:
-            logger.warning("No listings found")
-            return {
-                "brand": brand,
-                "products_count": len(products),
-                "matches": [],
-                "stats": {"listings_scraped": 0},
-            }
+            return self._create_error_response(brand, "No listings found", len(products))
 
-        listing_objects = [
+        # Step 3: Filter out already seen listings
+        new_listings = self._filter_seen_listings(listings)
+        if not new_listings:
+            return self._create_response(
+                brand=brand,
+                products_count=len(products),
+                matches=[],
+                stats={
+                    "listings_scraped": len(listings),
+                    "listings_skipped": len(listings),
+                    "listings_analyzed": 0,
+                }
+            )
+
+        # Step 4: Match listings to products (saves identified ones internally)
+        matches = self._match_listings(new_listings, products, require_price_match)
+
+        # Step 5: Generate response
+        stats = self._generate_stats(listings, new_listings, matches, products)
+        
+        logger.info(f"Complete - Found {len(matches)} matches")
+        logger.info("=" * 80)
+
+        return self._create_response(brand, len(products), matches, stats)
+
+    def _load_products(self, brand: str) -> List:
+        logger.info(f"\n[Step 1] Loading products for '{brand}'...")
+        products = self.product_service.get_products_for_brand(brand)
+        
+        if products:
+            logger.info(f"Loaded {len(products)} products")
+        else:
+            logger.warning(f"No products found for '{brand}'")
+        
+        return products
+
+    def _scrape_marketplace(self, search_term: str) -> List[Listing]:
+        logger.info(f"\n[Step 2] Scraping marketplace for '{search_term}'...")
+        
+        if not self.scraper.search(search_term):
+            logger.error("Search failed")
+            return []
+
+        raw_listings = self.scraper.collect_listings(self.settings.MAX_LISTINGS_DEFAULT)
+        logger.info(f"Scraped {len(raw_listings)} listings")
+
+        return [
             Listing(
                 url=l["url"],
                 title=l["title"],
@@ -89,59 +101,29 @@ class ScrapingOrchestrator:
                 location=l.get("location"),
                 scraped_at=l.get("scraped_at"),
             )
-            for l in listings
+            for l in raw_listings
         ]
 
-        # Save all scraped listings to database (just URL/title/price at this point)
+    def _filter_seen_listings(self, listings: List[Listing]) -> List[Listing]:
+        logger.info(f"\n[Step 3] Filtering already seen listings...")
+        
+        all_urls = [l.url for l in listings]
+        existing_urls = self.listing_repository.urls_exist(all_urls)
+        new_listings = [l for l in listings if l.url not in existing_urls]
+        
         logger.info(
-            f"\n[Step 2.5] Saving {len(listing_objects)} listings to database..."
-        )
-        for listing in listing_objects:
-            try:
-                self.listing_repository.upsert_listing(
-                    url=listing.url,
-                    title=listing.title,
-                    price=listing.price,
-                    location=listing.location,
-                    image_url=listing.image_url,
-                )
-            except Exception as e:
-                logger.warning(f"Failed to save listing {listing.url}: {e}")
-
-        # Filter out already analyzed listings
-        logger.info(f"\n[Step 2.6] Checking for already analyzed listings...")
-        all_urls = [l.url for l in listing_objects]
-        analyzed_urls = self.listing_repository.get_analyzed_urls(all_urls)
-
-        new_listings = [l for l in listing_objects if l.url not in analyzed_urls]
-
-        logger.info(
-            f"Skipping {len(analyzed_urls)} already analyzed listings, "
-            f"processing {len(new_listings)} new ones"
+            f"Skipping {len(existing_urls)} seen, analyzing {len(new_listings)} new"
         )
 
-        if not new_listings:
-            logger.info("No new listings to analyze")
-            return {
-                "brand": brand,
-                "products_count": len(products),
-                "matches": [],
-                "stats": {
-                    "listings_scraped": len(listing_objects),
-                    "listings_skipped": len(analyzed_urls),
-                    "listings_analyzed": 0,
-                },
-            }
+        if new_listings:
+            self._log_sample_listings(new_listings[:5])
 
-        logger.info(f"\n[Debug] Sample of first 5 new listings:")
-        for i, listing in enumerate(new_listings[:5], 1):
-            logger.info(f"  {i}. Title: '{listing.title}'")
-            logger.info(f"     Price: £{listing.price if listing.price else 'None'}")
-            logger.info(f"     URL: {listing.url[:80]}...")
+        return new_listings
 
-        logger.info(
-            f"\n[Step 3] Matching {len(new_listings)} listings against {len(products)} products..."
-        )
+    def _match_listings(
+        self, listings: List[Listing], products: List, require_price_match: bool
+    ) -> List[MatchResult]:
+        logger.info(f"\n[Step 4] Matching {len(listings)} listings...")
 
         keywords = self.product_service.get_filter_keywords()
         matching_engine = MatchingEngine(
@@ -150,59 +132,43 @@ class ScrapingOrchestrator:
             boost_keywords=keywords.get("boost", []),
         )
 
-        all_matches = matching_engine.match_listings(new_listings, products)
+        all_matches = matching_engine.match_listings(listings, products)
+        logger.info(f"Found {len(all_matches)} matches above threshold")
 
-        logger.info(
-            f"Found {len(all_matches)} matches above {settings.MIN_CONFIDENCE_THRESHOLD}% confidence"
-        )
+        # Save ALL identified listings (we know what they are)
+        self._save_identified_listings(all_matches)
 
+        # Then filter for API response based on price requirement
         if require_price_match:
             matches = [m for m in all_matches if m.has_price_match()]
-            logger.info(
-                f"Filtered to {len(matches)} matches with price match (price within acceptable range)"
-            )
+            logger.info(f"Filtered to {len(matches)} with price match")
         else:
             matches = all_matches
-            price_matched = len([m for m in matches if m.has_price_match()])
-            logger.info(
-                f"Keeping all matches ({price_matched} have price match, {len(matches) - price_matched} do not)"
-            )
 
-        # Update matched listings with product info
-        logger.info(
-            f"\n[Step 4] Updating {len(matches)} matched listings in database..."
-        )
+        return matches
+
+    def _save_identified_listings(self, matches: List[MatchResult]) -> None:
+        """
+        Save all listings where we identified the product (title matched)
+        This prevents re-analyzing them even if price was wrong
+        """
+        logger.info(f"\n[Step 4.5] Saving {len(matches)} identified listings to history...")
+        
         for match in matches:
             try:
-                self.listing_repository.upsert_listing(
+                self.listing_repository.add_listing(
                     url=match.listing.url,
                     title=match.listing.title,
                     price=match.listing.price,
                     location=match.listing.location,
-                    image_url=match.listing.image_url,
                     description=match.listing.description,
-                    product_id=match.product.id,
-                    match_confidence=match.confidence,
                 )
             except Exception as e:
-                logger.warning(
-                    f"Failed to update matched listing {match.listing.url}: {e}"
-                )
+                logger.warning(f"Failed to save {match.listing.url[:50]}: {e}")
 
-        stats = self._generate_stats(
-            listing_objects, new_listings, matches, products, len(analyzed_urls)
-        )
-
-        logger.info(f"\n[Complete] Workflow finished")
-        logger.info(f"Stats: {stats}")
-        logger.info(f"=" * 80)
-
-        return {
-            "brand": brand,
-            "products_count": len(products),
-            "matches": [m.to_dict() for m in matches],
-            "stats": stats,
-        }
+    def _save_matches(self, matches: List[MatchResult]) -> None:
+        """Deprecated - now using _save_identified_listings"""
+        pass
 
     def _generate_stats(
         self,
@@ -210,33 +176,58 @@ class ScrapingOrchestrator:
         analyzed_listings: List[Listing],
         matches: List[MatchResult],
         products: List,
-        skipped_count: int,
     ) -> Dict[str, Any]:
-
         matches_per_product = {}
         for match in matches:
-            product_id = match.product.id
-            if product_id not in matches_per_product:
-                matches_per_product[product_id] = 0
-            matches_per_product[product_id] += 1
+            matches_per_product[match.product.id] = (
+                matches_per_product.get(match.product.id, 0) + 1
+            )
 
         avg_confidence = (
             sum(m.confidence for m in matches) / len(matches) if matches else 0
         )
 
-        matched_listing_urls = {m.listing.url for m in matches}
-        unmatched_count = len(
-            [l for l in analyzed_listings if l.url not in matched_listing_urls]
-        )
+        matched_urls = {m.listing.url for m in matches}
+        unmatched = len([l for l in analyzed_listings if l.url not in matched_urls])
 
         return {
             "listings_scraped": len(all_listings),
-            "listings_skipped": skipped_count,
+            "listings_skipped": len(all_listings) - len(analyzed_listings),
             "listings_analyzed": len(analyzed_listings),
             "total_matches": len(matches),
-            "unique_listings_matched": len(matched_listing_urls),
-            "unmatched_listings": unmatched_count,
+            "unique_listings_matched": len(matched_urls),
+            "unmatched_listings": unmatched,
             "average_confidence": round(avg_confidence, 2),
             "products_with_matches": len(matches_per_product),
             "matches_per_product": matches_per_product,
+        }
+
+    def _log_sample_listings(self, listings: List[Listing]) -> None:
+        logger.info("\n[Debug] Sample listings:")
+        for i, listing in enumerate(listings, 1):
+            price_str = f"£{listing.price}" if listing.price else "No price"
+            logger.info(f"  {i}. {listing.title[:60]} - {price_str}")
+
+    def _create_response(
+        self,
+        brand: str,
+        products_count: int,
+        matches: List[MatchResult],
+        stats: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "brand": brand,
+            "products_count": products_count,
+            "matches": [m.to_dict() for m in matches],
+            "stats": stats,
+        }
+
+    def _create_error_response(
+        self, brand: str, error: str, products_count: int = 0
+    ) -> Dict[str, Any]:
+        return {
+            "brand": brand,
+            "products_count": products_count,
+            "matches": [],
+            "stats": {"error": error},
         }

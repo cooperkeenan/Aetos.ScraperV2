@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class ScraperAPI:
-    """Main API class for Aetos Scraper"""
 
     def __init__(self):
         self.settings = get_settings()
@@ -27,13 +26,11 @@ class ScraperAPI:
         logger.info("[API] Initialized with API key authentication")
 
     def _verify_api_key(self, x_api_key: Annotated[str, Header()] = None) -> str:
-        """Verify API key from request header"""
         if x_api_key != self.settings.api_key:
             raise HTTPException(status_code=401, detail="Invalid API key")
         return x_api_key
 
     def _register_routes(self):
-        """Register all API routes"""
 
         @self.app.get("/")
         def root():  # type: ignore

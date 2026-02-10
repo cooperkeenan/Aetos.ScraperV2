@@ -10,16 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 class DescriptionScraper:
-    """Fetches listing descriptions by clicking into posts"""
 
     def __init__(self, driver):
         self.driver = driver
 
     def fetch_description(self, listing_url: str) -> Optional[str]:
-        """
-        Navigate to listing and extract description
-        Returns full description text or None if failed
-        """
+       
         try:
             logger.info(
                 f"[Description] Fetching description from: {listing_url[:80]}..."
@@ -41,7 +37,7 @@ class DescriptionScraper:
                 try:
                     elements = WebDriverWait(
                         self.driver, 3
-                    ).until(  # Reduced from 5 seconds
+                    ).until( 
                         EC.presence_of_all_elements_located((By.CSS_SELECTOR, selector))
                     )
 
