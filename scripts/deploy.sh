@@ -23,12 +23,10 @@ if az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --o
     --name $CONTAINER_NAME \
     --yes \
     --output none
-  
-  # Wait for deletion to complete
+
   echo "⏳ Waiting for deletion to complete..."
   sleep 10
-  
-  # Verify it's gone
+
   MAX_WAIT=30
   WAITED=0
   while az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --output none 2>/dev/null; do
@@ -40,7 +38,7 @@ if az container show --resource-group $RESOURCE_GROUP --name $CONTAINER_NAME --o
     sleep 5
     WAITED=$((WAITED + 5))
   done
-  
+
   echo "✅ Old container deleted successfully"
 else
   echo "✅ No existing container found"
@@ -73,6 +71,8 @@ az container create \
     PROXY_CITIES=edinburgh \
     GOOGLE_USER=mike.steel505@gmail.com \
     GOOGLE_PASS=SuperSteelMike!0 \
+    ORCHESTRATOR_WEBHOOK_URL=https://aetos-orchestrator-func-gycubdb8cxd0fsgs.uksouth-01.azurewebsites.net/api/webhooks/scraper/job-complete \
+    ORCHESTRATOR_API_KEY=${ORCHESTRATOR_API_KEY:-aetos-production-key-2024} \
   --restart-policy Always
 
 echo ""
