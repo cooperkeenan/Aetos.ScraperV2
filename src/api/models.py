@@ -12,8 +12,8 @@ class JobStatus(str, Enum):
 
 
 class ScrapeRequest(BaseModel):
-    brand: str
-    search: Optional[str] = None
+    brands: List[str]
+    search: str
 
 
 class ScrapeResponse(BaseModel):
@@ -25,6 +25,6 @@ class ScrapeResponse(BaseModel):
 class JobStatusResponse(BaseModel):
     job_id: str
     status: JobStatus
-    brand: Optional[str] = None
+    brands: Optional[List[str]] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict
+from typing import Dict, List
 
 import requests
 
@@ -30,16 +30,8 @@ class SessionExecutor:
     def __init__(self, jobs: Dict[str, JobStatusResponse]):
         self.jobs = jobs
 
-    def execute(
-        self,
-        job_id: str,
-        brand: str,
-        search_term: str,
-        require_price_match: bool = True,
-    ):
-        logger.info(
-            f"[Job {job_id}] Starting scrape for brand: {brand}, search: {search_term}"
-        )
+    def execute(self, job_id: str, brands: List[str], search_term: str, require_price_match: bool = True):
+        logger.info(f"[Job {job_id}] Starting scrape for brands: {brands}, search: {search_term}")
         self.jobs[job_id].status = JobStatus.RUNNING
 
         try:
@@ -59,27 +51,24 @@ class SessionExecutor:
                     product_service,
                     browser.get_driver(),
                     ListingRepository(connection_string),
-                ).scrape_and_match_brand(
-                    brand, search_term, require_price_match=require_price_match
-                )
+                ).scrape_and_match_brand(brands, search_term, require_price_match=require_price_match)
 
             self.jobs[job_id].status = JobStatus.COMPLETED
             self.jobs[job_id].result = result
-            logger.info(
-                f"[Job {job_id}] Completed - Found {result['stats'].get('total_matches', 0)} matches"
-            )
+            logger.info(f"[Job {job_id}] Completed - Found {result['stats'].get('total_matches', 0)} matches")
 
-            self._notify_orchestrator(job_id, brand, result)
+            self._notify_orchestrator(job_id, brands, result)
 
         except Exception as e:
             logger.error(f"[Job {job_id}] Failed: {e}", exc_info=True)
             self.jobs[job_id].status = JobStatus.FAILED
             self.jobs[job_id].error = str(e)
 
-    def _notify_orchestrator(self, job_id: str, brand: str, result: dict) -> None:
+
+    def _notify_orchestrator(self, job_id: str, brands: List[str], result: dict) -> None:
         payload = {
             "job_id": job_id,
-            "brand": brand,
+            "brands": brands,
             "matches": result.get("matches", []),
         }
         try:
@@ -90,8 +79,6 @@ class SessionExecutor:
                 timeout=30,
             )
             response.raise_for_status()
-            logger.info(
-                f"[Job {job_id}] Orchestrator notified - {response.status_code}"
-            )
+            logger.info(f"[Job {job_id}] Orchestrator notified - {response.status_code}")
         except Exception as e:
             logger.error(f"[Job {job_id}] Failed to notify orchestrator: {e}")

@@ -26,6 +26,7 @@ class Settings:
 
     # Scraping
     MAX_LISTINGS_DEFAULT: int = 400
+    MAX_WITHOUT_BRAND_MATCH: int = 50
 
     # API
     api_key: str = "your-secret-key-change-me"

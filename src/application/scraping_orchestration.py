@@ -30,27 +30,24 @@ class ScrapingOrchestrator:
 
     def scrape_and_match_brand(
         self,
-        brand: str,
+        brands: List[str],
         search_term: str,
         require_price_match: bool = True,
     ) -> Dict[str, Any]:
-        logger.info(f"Starting scrape for brand: {brand}, search: {search_term}")
+        logger.info(f"Starting scrape for brands: {brands}, search: {search_term}")
 
-        # Step 1: Load products
-        products = self._load_products(brand)
+        products = self._load_products(brands)
         if not products:
-            return self._create_error_response(brand, "No products found")
+            return self._create_error_response(brands, "No products found")
 
-        # Step 2: Scrape marketplace
         listings = self._scrape_marketplace(search_term)
         if not listings:
-            return self._create_error_response(brand, "No listings found", len(products))
+            return self._create_error_response(brands, "No listings found", len(products))
 
-        # Step 3: Filter out already seen listings
         new_listings = self._filter_seen_listings(listings)
         if not new_listings:
             return self._create_response(
-                brand=brand,
+                brands=brands,
                 products_count=len(products),
                 matches=[],
                 stats={
@@ -60,26 +57,21 @@ class ScrapingOrchestrator:
                 }
             )
 
-        # Step 4: Match listings to products (saves identified ones internally)
         matches = self._match_listings(new_listings, products, require_price_match)
-
-        # Step 5: Generate response
         stats = self._generate_stats(listings, new_listings, matches, products)
-        
+
         logger.info(f"Complete - Found {len(matches)} matches")
-        logger.info("=" * 80)
+        return self._create_response(brands, len(products), matches, stats)
 
-        return self._create_response(brand, len(products), matches, stats)
+    def _load_products(self, brands: List[str]) -> List:
+        logger.info(f"\n[Step 1] Loading products for {brands}...")
+        products = self.product_service.get_products_for_brands(brands)
 
-    def _load_products(self, brand: str) -> List:
-        logger.info(f"\n[Step 1] Loading products for '{brand}'...")
-        products = self.product_service.get_products_for_brand(brand)
-        
         if products:
             logger.info(f"Loaded {len(products)} products")
         else:
-            logger.warning(f"No products found for '{brand}'")
-        
+            logger.warning(f"No products found for {brands}")
+
         return products
 
     def _scrape_marketplace(self, search_term: str) -> List[Listing]:
@@ -89,7 +81,7 @@ class ScrapingOrchestrator:
             logger.error("Search failed")
             return []
 
-        raw_listings = self.scraper.collect_listings(self.settings.MAX_LISTINGS_DEFAULT)
+        raw_listings = self.scraper.collect_listings(brands)
         logger.info(f"Scraped {len(raw_listings)} listings")
 
         return [
@@ -208,25 +200,18 @@ class ScrapingOrchestrator:
             price_str = f"£{listing.price}" if listing.price else "No price"
             logger.info(f"  {i}. {listing.title[:60]} - {price_str}")
 
-    def _create_response(
-        self,
-        brand: str,
-        products_count: int,
-        matches: List[MatchResult],
-        stats: Dict[str, Any],
-    ) -> Dict[str, Any]:
+    def _create_response(self, brands, products_count, matches, stats):
         return {
-            "brand": brand,
+            "brands": brands,
             "products_count": products_count,
             "matches": [m.to_dict() for m in matches],
             "stats": stats,
         }
 
-    def _create_error_response(
-        self, brand: str, error: str, products_count: int = 0
-    ) -> Dict[str, Any]:
+
+    def _create_error_response(self, brands, error, products_count=0):
         return {
-            "brand": brand,
+            "brands": brands,
             "products_count": products_count,
             "matches": [],
             "stats": {"error": error},

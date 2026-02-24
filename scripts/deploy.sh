@@ -6,6 +6,8 @@ IMAGE="aetos-scraper:latest"
 CONTAINER_NAME="aetos-api"
 RESOURCE_GROUP="aetos-dev-rg"
 LOCATION="eastus"
+STORAGE_ACCOUNT="aetoslogstorage"
+FILE_SHARE="aetos-logs"
 
 echo "🔨 Building in ACR..."
 az acr build \
@@ -13,6 +15,25 @@ az acr build \
   --image $IMAGE \
   --file Dockerfile \
   .
+
+echo ""
+echo "📦 Ensuring storage account and file share exist..."
+az storage account create \
+  --name $STORAGE_ACCOUNT \
+  --resource-group $RESOURCE_GROUP \
+  --location $LOCATION \
+  --sku Standard_LRS \
+  --output none 2>/dev/null || true
+
+az storage share create \
+  --name $FILE_SHARE \
+  --account-name $STORAGE_ACCOUNT \
+  --output none 2>/dev/null || true
+
+STORAGE_KEY=$(az storage account keys list \
+  --account-name $STORAGE_ACCOUNT \
+  --resource-group $RESOURCE_GROUP \
+  --query "[0].value" -o tsv)
 
 echo ""
 echo "🗑️  Checking for existing container..."
@@ -58,6 +79,10 @@ az container create \
   --ports 8000 \
   --cpu 2 \
   --memory 4 \
+  --azure-file-volume-account-name $STORAGE_ACCOUNT \
+  --azure-file-volume-account-key $STORAGE_KEY \
+  --azure-file-volume-share-name $FILE_SHARE \
+  --azure-file-volume-mount-path /app/logs \
   --environment-variables \
     API_KEY=${API_KEY:-aetos-production-key-2024} \
     DB_HOST=ep-broad-fire-a8ngftkc-pooler.eastus2.azure.neon.tech \
@@ -76,15 +101,18 @@ az container create \
   --restart-policy Always
 
 echo ""
+echo "🔑 Assigning ACI permissions to orchestrator managed identity..."
+az role assignment create \
+  --assignee "e1b435be-446f-4e6c-9993-6f9f03a63e5b" \
+  --role "Contributor" \
+  --scope "/subscriptions/37035190-2489-46aa-bc55-ccc9fc751ead/resourceGroups/aetos-dev-rg/providers/Microsoft.ContainerInstance/containerGroups/aetos-api" \
+  --output none 2>/dev/null || echo "⚠️  Role assignment already exists"
+
+echo ""
 echo "✅ API deployed and running!"
 echo ""
 echo "API URL: http://aetos-scraper.$LOCATION.azurecontainer.io:8000"
 echo "API Docs: http://aetos-scraper.$LOCATION.azurecontainer.io:8000/docs"
+echo "📁 Logs: Azure Storage Explorer → $STORAGE_ACCOUNT → $FILE_SHARE"
 echo ""
 echo "🔑 API Key: ${API_KEY:-aetos-production-key-2024}"
-echo ""
-echo "Test scrape:"
-echo "curl -X POST http://aetos-scraper.$LOCATION.azurecontainer.io:8000/scrape \\"
-echo "  -H 'Content-Type: application/json' \\"
-echo "  -H 'X-API-Key: ${API_KEY:-aetos-production-key-2024}' \\"
-echo "  -d '{\"brand\":\"Canon\"}'"

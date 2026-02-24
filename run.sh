@@ -12,17 +12,18 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║     Aetos Scraper - Menu           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════╝${NC}"
 echo ""
-echo "1) Deploy and stream logs"
+echo "1) Run Locally"
 echo "2) Start API"
 echo "3) Stop API"
 echo "4) Deploy only"
+echo "5) Stream Logs"
 echo ""
 read -p "Select option (1-4): " choice
 
 case $choice in
     1)
-        echo -e "${GREEN}Deploying and streaming logs...${NC}"
-        ./scripts/deploy.sh && ./scripts/logs.sh
+        echo -e "${GREEN}Running Locally....${NC}"
+        ./scripts/run_local.sh
         ;;
     2)
         echo -e "${GREEN}Starting API...${NC}"
@@ -35,6 +36,10 @@ case $choice in
     4)
         echo -e "${GREEN}Deploying...${NC}"
         ./scripts/deploy.sh
+        ;;
+    5)
+        echo -e "${GREEN}Streaming Logs...${NC}"
+        ./scripts/logs.sh
         ;;
     *)
         echo -e "${RED}Invalid option${NC}"

@@ -33,3 +33,9 @@ class ProductService:
         logger.info(f"Loaded {len(boost)} boost keywords: {boost[:5] if boost else []}")
 
         return keywords_dict
+    
+    def get_products_for_brands(self, brands: List[str]) -> List[Product]:
+        products = self.product_repository.get_active_products_by_brands(brands)
+        logger.info(f"Found {len(products)} products across {brands}")
+        
+        return products

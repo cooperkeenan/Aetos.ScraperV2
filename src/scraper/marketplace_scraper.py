@@ -4,6 +4,7 @@ from typing import Dict, List
 
 from selenium.webdriver.common.by import By
 
+from ..core.settings import get_settings
 from .browser_helper import BrowserHelper
 from .element_extractor import ElementExtractor
 
@@ -15,10 +16,10 @@ class MarketplaceScraper:
     def __init__(self, driver):
         self.driver = driver
         self.browser = BrowserHelper(driver)
+        self.settings = get_settings()
         self.base_url = "https://www.facebook.com/marketplace"
 
     def search(self, query: str) -> bool:
-
         search_url = f"{self.base_url}/search/?query={query}"
         logger.info(f"[Scraper] Searching: {search_url}")
 
@@ -37,23 +38,32 @@ class MarketplaceScraper:
             logger.error(f"[Scraper] Search failed: {e}", exc_info=True)
             return False
 
-    def collect_listings(self, max_listings: int = 200) -> List[Dict]:
+    def collect_listings(self, brands: List[str]) -> List[Dict]:
+        max_listings = self.settings.MAX_LISTINGS_DEFAULT
+        max_without_brand = self.settings.MAX_SCROLLS_WITHOUT_BRAND_MATCH
 
-        logger.info("[Scraper] Starting collection...")
+        logger.info(f"[Scraper] Starting collection (max={max_listings}, brands={brands})...")
         time.sleep(2)
 
         listings = []
         seen_urls = set()
         scrolls_without_new = 0
+        consecutive_without_brand = 0
+        brands_lower = [b.lower() for b in brands]
 
         for scroll in range(100):
             new_listings = self._extract_visible_listings(seen_urls)
 
             if new_listings:
-                listings.extend(new_listings)
                 scrolls_without_new = 0
+                for listing in new_listings:
+                    listings.append(listing)
+                    if any(b in listing["title"].lower() for b in brands_lower):
+                        consecutive_without_brand = 0
+                    else:
+                        consecutive_without_brand += 1
+
                 time.sleep(0.5)
-                logger.debug(f"Collected {len(listings)} total")
             else:
                 scrolls_without_new += 1
 
@@ -65,15 +75,18 @@ class MarketplaceScraper:
                 logger.info(f"Stopped: Reached {max_listings} listings")
                 break
 
+            if consecutive_without_brand >= max_without_brand:
+                logger.info(f"Stopped: {max_without_brand} consecutive listings without brand match")
+                break
+
             self.browser.scroll_down()
-            time.sleep(1)
+            time.sleep(2)
 
         logger.info(f"[Scraper] Collected {len(listings)} listings")
         return listings
 
     def _is_on_marketplace(self) -> bool:
-        current_url = self.driver.current_url
-        return "/marketplace/" in current_url
+        return "/marketplace/" in self.driver.current_url
 
     def _log_search_failure(self) -> None:
         logger.error(f"[Scraper] Not on marketplace")
@@ -91,7 +104,6 @@ class MarketplaceScraper:
     def _save_failure_screenshot(self) -> None:
         try:
             import datetime
-
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             path = f"/app/logs/marketplace_failed_{timestamp}.png"
             self.driver.save_screenshot(path)
@@ -100,13 +112,10 @@ class MarketplaceScraper:
             logger.error(f"[Scraper] Screenshot failed: {e}")
 
     def _extract_visible_listings(self, seen_urls: set) -> List[Dict]:
-
         new_listings = []
 
         try:
-            links = self.driver.find_elements(
-                By.CSS_SELECTOR, "a[href*='/marketplace/item/']"
-            )
+            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']")
 
             for link in links:
                 try:

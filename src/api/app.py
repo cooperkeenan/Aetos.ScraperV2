@@ -1,5 +1,6 @@
 import logging
 import uuid
+import os
 from typing import Dict
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException
@@ -32,41 +33,36 @@ class ScraperAPI:
 
     def _register_routes(self):
 
+        # Health Check
         @self.app.get("/")
         def root():  # type: ignore
             return {"message": "Aetos Scraper API", "status": "running"}
 
-        @self.app.post(
-            "/scrape",
-            response_model=ScrapeResponse,
-            dependencies=[Depends(self._verify_api_key)],
-        )
-        def scrape_brand(request: ScrapeRequest, background_tasks: BackgroundTasks):  # type: ignore
+
+        # Start Scrape
+        @self.app.post("/scrape", response_model=ScrapeResponse, dependencies=[Depends(self._verify_api_key)])
+        def scrape_brand(request: ScrapeRequest, background_tasks: BackgroundTasks):
             job_id = str(uuid.uuid4())
 
-            search_term = request.search if request.search else request.brand
-
             self.jobs[job_id] = JobStatusResponse(
-                job_id=job_id, status=JobStatus.PENDING, brand=request.brand
+                job_id=job_id, status=JobStatus.PENDING, brands=request.brands
             )
 
             background_tasks.add_task(
-                self.session_executor.execute, job_id, request.brand, search_term
+                self.session_executor.execute, job_id, request.brands, request.search
             )
 
-            logger.info(f"Created scrape job {job_id} for brand: {request.brand}, search: {search_term}")
+            logger.info(f"Created scrape job {job_id} for brands: {request.brands}, search: {request.search}")
 
             return ScrapeResponse(
                 job_id=job_id,
                 status=JobStatus.PENDING,
-                message=f"Scrape job started for brand: {request.brand}",
+                message=f"Scrape job started for brands: {request.brands}",
             )
 
-        @self.app.get(
-            "/scrape/{job_id}",
-            response_model=JobStatusResponse,
-            dependencies=[Depends(self._verify_api_key)],
-        )
+
+        # Check Job Status
+        @self.app.get("/scrape/{job_id}", response_model=JobStatusResponse, dependencies=[Depends(self._verify_api_key)],)
         def get_job_status(job_id: str):  # type: ignore
             if job_id not in self.jobs:
                 raise HTTPException(status_code=404, detail="Job not found")
@@ -79,6 +75,14 @@ class ScraperAPI:
         )
         def list_jobs():  # type: ignore
             return self.jobs
+
+        @self.app.get("/logs/{filename}", dependencies=[Depends(self._verify_api_key)])
+        def get_log_file(filename: str):
+            from fastapi.responses import FileResponse
+            path = f"/app/logs/{filename}"
+            if not os.path.exists(path):
+                raise HTTPException(status_code=404, detail="File not found")
+            return FileResponse(path)
 
 
 api = ScraperAPI()

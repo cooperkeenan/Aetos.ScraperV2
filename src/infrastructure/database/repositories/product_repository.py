@@ -130,6 +130,35 @@ class ProductRepository(IProductRepository):
         except Exception as e:
             logger.error(f"Failed to get filter keywords: {e}")
             raise
+    
+    def get_active_products_by_brands(self, brands: List[str]) -> List[Product]:
+        query = """
+            SELECT 
+                p.id, p.brand, p.model, p.full_name, p.category,
+                p.buy_price_min, p.buy_price_max, p.sell_target, p.active
+            FROM products p
+            WHERE p.brand = ANY(%s) AND p.active = true
+            ORDER BY p.brand, p.model
+        """
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                    cur.execute(query, (brands,))
+                    rows = cur.fetchall()
+
+                    products = []
+                    for row in rows:
+                        product = self._row_to_product(row)
+                        product.fuzzy_patterns = self._get_fuzzy_patterns(product.id, cur)
+                        product.aliases = self._get_aliases(product.id, cur)
+                        products.append(product)
+
+                    logger.info(f"Loaded {len(products)} products for brands {brands}")
+                    return products
+
+        except Exception as e:
+            logger.error(f"Failed to get products for brands {brands}: {e}")
+            raise
 
     def _get_fuzzy_patterns(self, product_id: int, cursor) -> List[str]:
         cursor.execute(
