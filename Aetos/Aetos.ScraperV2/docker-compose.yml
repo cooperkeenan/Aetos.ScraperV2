@@ -1,0 +1,35 @@
+services:
+  scraper-test:
+    build: .
+    container_name: aetos-scraper-test
+    env_file: 
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./cookies:/app/cookies
+      - ./logs:/app/logs
+    command: python test_navigation.py
+    profiles:
+      - test
+
+  scraper-api:
+    build: .
+    container_name: aetos-scraper-api
+    env_file: .env
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - PORT=8000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cookies:/app/cookies
+      - ./logs:/app/logs
+    command: uvicorn src.api.app:app --host 0.0.0.0 --port 8000 --reload
+
+# Usage:
+# Test scraper:     docker-compose --profile test up scraper-test
+# Run API server:   docker-compose up scraper-api
+# Build only:       docker-compose build
