@@ -98,7 +98,7 @@ az container create \
     GOOGLE_PASS=SuperSteelMike!0 \
     ORCHESTRATOR_WEBHOOK_URL=https://aetos-orchestrator-func-gycubdb8cxd0fsgs.uksouth-01.azurewebsites.net/api/webhooks/scraper/job-complete \
     ORCHESTRATOR_API_KEY=${ORCHESTRATOR_API_KEY:-aetos-production-key-2024} \
-  --restart-policy Always
+  --restart-policy Never
 
 echo ""
 echo "🔑 Assigning ACI permissions to orchestrator managed identity..."

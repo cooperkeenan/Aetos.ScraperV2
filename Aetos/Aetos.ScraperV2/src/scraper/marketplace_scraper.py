@@ -54,7 +54,7 @@ class MarketplaceScraper:
         consecutive_without_brand = 0
         brands_lower = [b.lower() for b in brands]
 
-        for scroll in range(100):
+        for scroll in range(200):
             new_listings = self._extract_visible_listings(seen_urls)
 
             if new_listings:
@@ -65,13 +65,12 @@ class MarketplaceScraper:
                         consecutive_without_brand = 0
                     else:
                         consecutive_without_brand += 1
-
-                time.sleep(0.5)
+                logger.info(f"[Scraper] Extracted {len(new_listings)} new listings (total={len(listings)})")
             else:
                 scrolls_without_new += 1
 
             if scrolls_without_new >= 10:
-                logger.info("Stopped: No new listings found")
+                logger.info("Stopped: No new listings after 10 scrolls")
                 break
 
             if len(listings) >= max_listings:
@@ -82,32 +81,13 @@ class MarketplaceScraper:
                 logger.info(f"Stopped: {max_without_brand} consecutive listings without brand match")
                 break
 
-            before_dom_count = self._count_listing_elements()
-            moved = self.browser.scroll_down()
-            logger.info(
-                "[Scraper] Scroll attempt: moved=%s before_count=%s",
-                moved,
-                before_dom_count,
-            )
-            self._wait_for_more_listings(before_dom_count, timeout_seconds=6)
-            after_dom_count = self._count_listing_elements()
-            logger.info(
-                "[Scraper] Listings after scroll: after_count=%s (+%s)",
-                after_dom_count,
-                max(0, after_dom_count - before_dom_count),
-            )
-            if not moved and after_dom_count <= before_dom_count:
-                logger.info("[Scraper] Primary scroll failed; trying fallback scrollIntoView")
-                self._scroll_last_listing_into_view()
-                self._wait_for_more_listings(after_dom_count, timeout_seconds=6)
-                after_fallback_count = self._count_listing_elements()
-                logger.info(
-                    "[Scraper] Listings after fallback: after_count=%s (+%s)",
-                    after_fallback_count,
-                    max(0, after_fallback_count - after_dom_count),
-                )
-                self._save_scroll_debug_snapshot()
-            time.sleep(1.5)
+            if scroll <= 2:
+                self._save_scroll_screenshot(f"scroll_{scroll:02d}_before")
+
+            self.browser.scroll_down()
+
+            if scroll <= 2:
+                self._save_scroll_screenshot(f"scroll_{scroll:02d}_after")
 
         logger.info(f"[Scraper] Collected {len(listings)} listings")
         return listings
@@ -126,7 +106,7 @@ class MarketplaceScraper:
             logger.info("[Scraper] Marketplace results loaded")
         except Exception as e:
             logger.warning("[Scraper] Marketplace results wait timed out: %s", e)
-    
+
     def _wait_for_marketplace_ready(self, timeout: int = 15) -> None:
         try:
             WebDriverWait(self.driver, timeout).until(
@@ -135,6 +115,7 @@ class MarketplaceScraper:
             WebDriverWait(self.driver, timeout).until(
                 lambda d: len(d.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']")) > 0
             )
+            self._dismiss_overlays()
             WebDriverWait(self.driver, timeout).until(
                 lambda d: d.execute_script(
                     "const busy = document.querySelector('[aria-busy=\"true\"]'); return !busy;"
@@ -143,6 +124,26 @@ class MarketplaceScraper:
             logger.info("[Scraper] Marketplace DOM ready")
         except Exception as e:
             logger.warning("[Scraper] Marketplace ready wait timed out: %s", e)
+
+    def _dismiss_overlays(self) -> None:
+        selectors = [
+            (By.XPATH, "//button[text()='Close']"),
+            (By.XPATH, "//div[@role='alertdialog']//button"),
+            (By.CSS_SELECTOR, "div[aria-label='Close'][role='button']"),
+            (By.CSS_SELECTOR, "button[aria-label='Close']"),
+        ]
+        for by, selector in selectors:
+            try:
+                btn = WebDriverWait(self.driver, 3).until(
+                    EC.element_to_be_clickable((by, selector))
+                )
+                btn.click()
+                logger.info(f"[Scraper] Dismissed overlay: {selector}")
+                time.sleep(1.5)
+                return
+            except:
+                continue
+        logger.warning("[Scraper] No overlay found to dismiss")
 
     def _log_search_failure(self) -> None:
         logger.error(f"[Scraper] Not on marketplace")
@@ -159,7 +160,6 @@ class MarketplaceScraper:
 
     def _save_failure_screenshot(self) -> None:
         try:
-            import datetime
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             path = f"/app/logs/marketplace_failed_{timestamp}.png"
             self.driver.save_screenshot(path)
@@ -189,32 +189,13 @@ class MarketplaceScraper:
 
         return new_listings
 
-    def _count_listing_elements(self) -> int:
+    def _save_scroll_screenshot(self, label: str) -> None:
         try:
-            return len(self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']"))
-        except Exception:
-            return 0
-
-    def _wait_for_more_listings(self, before_count: int, timeout_seconds: int = 6) -> bool:
-        end = time.time() + timeout_seconds
-        while time.time() < end:
-            if self._count_listing_elements() > before_count:
-                return True
-            time.sleep(0.5)
-        return False
-
-    def _scroll_last_listing_into_view(self) -> bool:
-        try:
-            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']")
-            if not links:
-                return False
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView({block: 'end'});",
-                links[-1],
-            )
-            return True
-        except Exception:
-            return False
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = f"/app/logs/scroll_{label}_{timestamp}.png"
+            self.browser.save_screenshot(path)
+        except Exception as e:
+            logger.error(f"[Scraper] Screenshot failed: {e}")
 
     def _save_scroll_debug_snapshot(self) -> None:
         try:
