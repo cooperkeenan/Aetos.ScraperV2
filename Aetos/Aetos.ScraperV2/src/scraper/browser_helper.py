@@ -20,59 +20,50 @@ class BrowserHelper:
 
     def scroll_down(self) -> bool:
         try:
-            result = self.driver.execute_script(
-                """
-                const getScrollable = () => {
-                  const candidates = Array.from(
-                    document.querySelectorAll(
-                      "div[role='feed'], div[role='main'], div[data-pagelet*='Marketplace'], div[aria-label*='Marketplace']"
-                    )
-                  );
-                  const withDoc = [document.scrollingElement, ...candidates].filter(Boolean);
-                  let best = null;
-                  let bestScroll = 0;
-                  for (const el of withDoc) {
-                    const scrollable = el.scrollHeight - el.clientHeight;
-                    if (scrollable > bestScroll) {
-                      bestScroll = scrollable;
-                      best = el;
-                    }
-                  }
-                  return best;
-                };
+            current_scroll = self.driver.execute_script("return window.pageYOffset;")
+            page_height = self.driver.execute_script("return document.body.scrollHeight;")
+            window_height = self.driver.execute_script("return window.innerHeight;")
 
-                const el = getScrollable();
-                if (!el) return { moved: false, reason: "no-scrollable" };
-                const before = el.scrollTop;
-                el.scrollBy(0, 800);
-                return {
-                  moved: el.scrollTop !== before,
-                  tag: el.tagName,
-                  role: el.getAttribute("role"),
-                  aria: el.getAttribute("aria-label"),
-                  before,
-                  after: el.scrollTop,
-                  height: el.scrollHeight,
-                  client: el.clientHeight,
-                };
-                """
+            logger.info(
+                "Scroll metrics: current=%s window=%s page=%s",
+                current_scroll,
+                window_height,
+                page_height,
             )
-            if result:
-                logger.info(
-                    "Scroll result: moved=%s tag=%s role=%s aria=%s before=%s after=%s height=%s client=%s",
-                    result.get("moved"),
-                    result.get("tag"),
-                    result.get("role"),
-                    result.get("aria"),
-                    result.get("before"),
-                    result.get("after"),
-                    result.get("height"),
-                    result.get("client"),
-                )
-            return bool(result and result.get("moved"))
+
+            if current_scroll + window_height >= page_height - 500:
+                logger.info("Scroll result: at-bottom=true")
+                return False
+
+            scroll_method = random.choice(["smooth_scroll", "page_scroll"])
+            time.sleep(2)
+
+            if scroll_method == "smooth_scroll":
+                self._smooth_scroll()
+            else:
+                self._page_scroll()
+
+            new_scroll = self.driver.execute_script("return window.pageYOffset;")
+            moved = new_scroll != current_scroll
+            logger.info("Scroll result: method=%s moved=%s before=%s after=%s", scroll_method, moved, current_scroll, new_scroll)
+            return bool(moved)
         except Exception as e:
             logger.debug(f"Scroll failed: {e}")
             return False
+
+    def _smooth_scroll(self) -> None:
+        scroll_amount = random.randint(300, 800)
+        increments = random.randint(3, 6)
+        increment_size = max(1, scroll_amount // increments)
+
+        for _ in range(increments):
+            self.driver.execute_script(f"window.scrollBy(0, {increment_size});")
+            time.sleep(random.uniform(0.1, 0.3))
+
+    def _page_scroll(self) -> None:
+        window_height = self.driver.execute_script("return window.innerHeight;")
+        scroll_amount = random.randint(int(window_height * 0.3), int(window_height * 0.8))
+        self.driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
 
     def save_screenshot(self, filepath: str) -> bool:
         try:
