@@ -1,8 +1,11 @@
+import datetime
 import logging
 import time
 from typing import Dict, List
 
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 from ..core.settings import get_settings
 from .browser_helper import BrowserHelper
@@ -25,7 +28,7 @@ class MarketplaceScraper:
 
         try:
             self.driver.get(search_url)
-            time.sleep(3)
+            self._wait_for_marketplace_results(timeout=15)
 
             if not self._is_on_marketplace():
                 self._log_search_failure()
@@ -43,7 +46,7 @@ class MarketplaceScraper:
         max_without_brand = self.settings.MAX_SCROLLS_WITHOUT_BRAND_MATCH
 
         logger.info(f"[Scraper] Starting collection (max={max_listings}, brands={brands})...")
-        time.sleep(2)
+        self._wait_for_marketplace_ready(timeout=15)
 
         listings = []
         seen_urls = set()
@@ -67,7 +70,7 @@ class MarketplaceScraper:
             else:
                 scrolls_without_new += 1
 
-            if scrolls_without_new >= 20:
+            if scrolls_without_new >= 10:
                 logger.info("Stopped: No new listings found")
                 break
 
@@ -79,14 +82,67 @@ class MarketplaceScraper:
                 logger.info(f"Stopped: {max_without_brand} consecutive listings without brand match")
                 break
 
-            self.browser.scroll_down()
-            time.sleep(2)
+            before_dom_count = self._count_listing_elements()
+            moved = self.browser.scroll_down()
+            logger.info(
+                "[Scraper] Scroll attempt: moved=%s before_count=%s",
+                moved,
+                before_dom_count,
+            )
+            self._wait_for_more_listings(before_dom_count, timeout_seconds=6)
+            after_dom_count = self._count_listing_elements()
+            logger.info(
+                "[Scraper] Listings after scroll: after_count=%s (+%s)",
+                after_dom_count,
+                max(0, after_dom_count - before_dom_count),
+            )
+            if not moved and after_dom_count <= before_dom_count:
+                logger.info("[Scraper] Primary scroll failed; trying fallback scrollIntoView")
+                self._scroll_last_listing_into_view()
+                self._wait_for_more_listings(after_dom_count, timeout_seconds=6)
+                after_fallback_count = self._count_listing_elements()
+                logger.info(
+                    "[Scraper] Listings after fallback: after_count=%s (+%s)",
+                    after_fallback_count,
+                    max(0, after_fallback_count - after_dom_count),
+                )
+                self._save_scroll_debug_snapshot()
+            time.sleep(1.5)
 
         logger.info(f"[Scraper] Collected {len(listings)} listings")
         return listings
 
     def _is_on_marketplace(self) -> bool:
         return "/marketplace/" in self.driver.current_url
+
+    def _wait_for_marketplace_results(self, timeout: int = 15) -> None:
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: "/marketplace/" in d.current_url
+            )
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: len(d.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']")) > 0
+            )
+            logger.info("[Scraper] Marketplace results loaded")
+        except Exception as e:
+            logger.warning("[Scraper] Marketplace results wait timed out: %s", e)
+    
+    def _wait_for_marketplace_ready(self, timeout: int = 15) -> None:
+        try:
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: d.execute_script("return document.readyState") == "complete"
+            )
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: len(d.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']")) > 0
+            )
+            WebDriverWait(self.driver, timeout).until(
+                lambda d: d.execute_script(
+                    "const busy = document.querySelector('[aria-busy=\"true\"]'); return !busy;"
+                )
+            )
+            logger.info("[Scraper] Marketplace DOM ready")
+        except Exception as e:
+            logger.warning("[Scraper] Marketplace ready wait timed out: %s", e)
 
     def _log_search_failure(self) -> None:
         logger.error(f"[Scraper] Not on marketplace")
@@ -132,3 +188,42 @@ class MarketplaceScraper:
             logger.error(f"[Scraper] Extraction error: {e}")
 
         return new_listings
+
+    def _count_listing_elements(self) -> int:
+        try:
+            return len(self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']"))
+        except Exception:
+            return 0
+
+    def _wait_for_more_listings(self, before_count: int, timeout_seconds: int = 6) -> bool:
+        end = time.time() + timeout_seconds
+        while time.time() < end:
+            if self._count_listing_elements() > before_count:
+                return True
+            time.sleep(0.5)
+        return False
+
+    def _scroll_last_listing_into_view(self) -> bool:
+        try:
+            links = self.driver.find_elements(By.CSS_SELECTOR, "a[href*='/marketplace/item/']")
+            if not links:
+                return False
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'end'});",
+                links[-1],
+            )
+            return True
+        except Exception:
+            return False
+
+    def _save_scroll_debug_snapshot(self) -> None:
+        try:
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            html_path = f"/app/logs/marketplace_scroll_debug_{timestamp}.html"
+            png_path = f"/app/logs/marketplace_scroll_debug_{timestamp}.png"
+            if self.browser.save_html(html_path):
+                logger.info(f"[Scraper] HTML snapshot: {html_path}")
+            if self.browser.save_screenshot(png_path):
+                logger.info(f"[Scraper] Screenshot snapshot: {png_path}")
+        except Exception as e:
+            logger.error(f"[Scraper] Debug snapshot failed: {e}")

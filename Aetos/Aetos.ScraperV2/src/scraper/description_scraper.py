@@ -25,12 +25,10 @@ class DescriptionScraper:
             time.sleep(1.5)
 
             description_selectors = [
+                "div[data-testid='marketplace-pdp-description']",
+                "div.xz9dl7a div.x1iorvi4",
                 "div[style*='text-align: start']",
-                "div.x1iorvi4.x4uap5.xjkvuk6",
-                "span[dir='auto']",
-                "div.xdj266r",
             ]
-
             description_text = ""
 
             for selector in description_selectors:
@@ -55,9 +53,8 @@ class DescriptionScraper:
 
             if description_text:
                 description_text = description_text.strip()
-                logger.info(
-                    f"[Description] Found {len(description_text)} chars: {description_text[:100]}..."
-                )
+                logger.info(f"[Description] Found {len(description_text)} chars")
+                logger.info(f"[Description] Raw text: {description_text[:800]}")
                 return description_text
 
             logger.warning(f"[Description] No description found")
