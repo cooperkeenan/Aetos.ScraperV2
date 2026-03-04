@@ -28,21 +28,16 @@ class ScrapingOrchestrator:
         self.listing_repository = listing_repository
         self.settings = get_settings()
 
-    def scrape_and_match_brand(
-        self,
-        brands: List[str],
-        search_term: str,
-        require_price_match: bool = True,
-    ) -> Dict[str, Any]:
-        logger.info(f"Starting scrape for brands: {brands}, search: {search_term}")
-
+    def scrape_and_match_brand(self, brands, search_term, require_price_match=True):
         products = self._load_products(brands)
         if not products:
             return self._create_error_response(brands, "No products found")
 
         listings = self._scrape_marketplace(search_term, brands)
         if not listings:
-            return self._create_error_response(brands, "No listings found", len(products))
+            return self._create_error_response(
+                brands, "No listings found", len(products)
+            )
 
         new_listings = self._filter_seen_listings(listings)
         if not new_listings:
@@ -54,36 +49,27 @@ class ScrapingOrchestrator:
                     "listings_scraped": len(listings),
                     "listings_skipped": len(listings),
                     "listings_analyzed": 0,
-                }
+                },
             )
 
         matches = self._match_listings(new_listings, products, require_price_match)
         stats = self._generate_stats(listings, new_listings, matches, products)
 
-        logger.info(f"Complete - Found {len(matches)} matches")
         return self._create_response(brands, len(products), matches, stats)
 
-    def _load_products(self, brands: List[str]) -> List:
-        logger.info(f"\n[Step 1] Loading products for {brands}...")
+    def _load_products(self, brands):
+        logger.info(f"[Step 1] Loading products for {brands}...\n")
         products = self.product_service.get_products_for_brands(brands)
-
-        if products:
-            logger.info(f"Loaded {len(products)} products")
-        else:
-            logger.warning(f"No products found for {brands}")
-
+        logger.info(f"Loaded {len(products)} products\n")
         return products
 
-    def _scrape_marketplace(self, search_term: str, brands: List[str]) -> List[Listing]:
-        logger.info(f"\n[Step 2] Scraping marketplace for '{search_term}'...")
-        
+    def _scrape_marketplace(self, search_term, brands):
+        logger.info(f"[Step 2] Scraping marketplace for '{search_term}'...\n")
         if not self.scraper.search(search_term):
             logger.error("Search failed")
             return []
-
         raw_listings = self.scraper.collect_listings(brands)
-        logger.info(f"Scraped {len(raw_listings)} listings")
-
+        logger.info(f"Collected {len(raw_listings)} listings\n")
         return [
             Listing(
                 url=l["url"],
@@ -96,20 +82,12 @@ class ScrapingOrchestrator:
             for l in raw_listings
         ]
 
-    def _filter_seen_listings(self, listings: List[Listing]) -> List[Listing]:
-        logger.info(f"\n[Step 3] Filtering already seen listings...")
-        
+    def _filter_seen_listings(self, listings):
+        logger.info(f"[Step 3] Filtering seen listings...\n")
         all_urls = [l.url for l in listings]
         existing_urls = self.listing_repository.urls_exist(all_urls)
         new_listings = [l for l in listings if l.url not in existing_urls]
-        
-        logger.info(
-            f"Skipping {len(existing_urls)} seen, analyzing {len(new_listings)} new"
-        )
-
-        if new_listings:
-            self._log_sample_listings(new_listings[:5])
-
+        logger.info(f"{len(new_listings)} new, {len(existing_urls)} skipped\n")
         return new_listings
 
     def _match_listings(
@@ -144,8 +122,10 @@ class ScrapingOrchestrator:
         Save all listings where we identified the product (title matched)
         This prevents re-analyzing them even if price was wrong
         """
-        logger.info(f"\n[Step 4.5] Saving {len(matches)} identified listings to history...")
-        
+        logger.info(
+            f"\n[Step 4.5] Saving {len(matches)} identified listings to history..."
+        )
+
         for match in matches:
             try:
                 self.listing_repository.add_listing(
@@ -207,7 +187,6 @@ class ScrapingOrchestrator:
             "matches": [m.to_dict() for m in matches],
             "stats": stats,
         }
-
 
     def _create_error_response(self, brands, error, products_count=0):
         return {

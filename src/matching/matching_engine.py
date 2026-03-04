@@ -33,13 +33,9 @@ class MatchingEngine:
     def match_listings(
         self, listings: List[Listing], products: List[Product]
     ) -> List[MatchResult]:
-
-        """Match multiple listings, returning best match for each listing"""
         logger.info(
-            f"\n[Matching] Processing {len(listings)} listings vs {len(products)} products"
+            f"[Step 4] Matching {len(listings)} listings against {len(products)} products...\n"
         )
-
-        self._log_sample_listings(listings[:3])
 
         all_matches = []
         for listing in listings:
@@ -47,13 +43,12 @@ class MatchingEngine:
             if best_match:
                 all_matches.append(best_match)
 
-        logger.info(f"\n[Matching] Found {len(all_matches)} matches")
+        logger.info(f"Found {len(all_matches)} matches\n")
         return all_matches
 
     def _find_best_match(
         self, listing: Listing, products: List[Product]
     ) -> Optional[MatchResult]:
-        """Find best matching product for a listing"""
         matches = []
 
         for product in products:
@@ -61,23 +56,30 @@ class MatchingEngine:
             if match and match.is_confident_match():
                 matches.append(match)
 
+        price_str = f"£{listing.price:.0f}" if listing.price else "n/a"
+
         if not matches:
+            logger.info(
+                f"  Title: {listing.title}\n"
+                f"  Price: {price_str}\n"
+                f"  Model: n/a\n"
+            )
             return None
 
-        # Return highest confidence match
-        best_match = max(matches, key=lambda m: m.confidence)
-        
+        best = max(matches, key=lambda m: m.confidence)
+
         logger.info(
-            f"[Match] '{listing.title[:50]}' → "
-            f"{best_match.product.model} ({best_match.confidence:.0f}%)"
+            f"  Title: {listing.title}\n"
+            f"  Price: {price_str}\n"
+            f"  Model: {best.product.model} ({best.confidence:.0f}%)\n"
         )
 
-        return best_match
+        return best
 
     def _match_single(
         self, listing: Listing, product: Product
     ) -> Optional[MatchResult]:
-      
+
         # Phase 1: Quick rejection checks
         title_score, title_reason = self.title_matcher.match(listing, product)
         if title_score < 60:
@@ -117,9 +119,7 @@ class MatchingEngine:
             keyword_reason=keyword_reason,
         )
 
-    def _has_reject_keywords_in_title(
-        self, listing: Listing, product: Product
-    ) -> bool:
+    def _has_reject_keywords_in_title(self, listing: Listing, product: Product) -> bool:
         initial_score, reason = self.keyword_filter.match(listing, product)
         if initial_score == 0:
             logger.debug(f"[Match] Rejected by title: {reason}")
@@ -128,9 +128,7 @@ class MatchingEngine:
 
     def _ensure_description(self, listing: Listing) -> None:
         if not listing.description:
-            logger.info(
-                f"[Match] Fetching description: {listing.title[:50]}..."
-            )
+            logger.info(f"[Match] Fetching description: {listing.title[:50]}...")
             listing.description = self.description_scraper.fetch_description(
                 listing.url
             )
